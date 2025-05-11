@@ -1,26 +1,21 @@
-[project]
+[tool.poetry]
 name = "onnx-inference-rust"
 version = "0.0.1"
 description = ""
-authors = [
-    {name = "Your Name",email = "you@example.com"}
-]
+authors = ["Simon Janssen <janssen.simon@posteo.de>"]
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
-    "torch (>=2.7.0,<3.0.0)",
-    "torchvision (>=0.22.0,<0.23.0)",
-    "ultralytics (>=8.3.122,<9.0.0)",
-    "onnx (>=1.17.0,<2.0.0)",
-    "onnxruntime-gpu (>=1.21.1,<2.0.0)",
-    "onnxslim (>=0.1.50,<0.2.0)",
-    "timm (>=1.0.15,<2.0.0)"
-]
 
-[tool.poetry]
-packages = [{include = "playgrounds"}]
+[tool.poetry.dependencies]
+python = "^3.12"
+torch = "^2.7.0"
+torchvision = "^0.22.0"
+onnx = "^1.17.0"
+onnxruntime-gpu = "^1.22.0"
+onnxslim = "^0.1.52"
+timm = "^1.0.15"
+ultralytics = "^8.3.131"
 
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
+requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
