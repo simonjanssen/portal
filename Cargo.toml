@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.98"
 image = "0.25.6"
+imageproc = "0.25.0"
 ndarray = "0.16.1"
 ort = "=2.0.0-rc.9"
 serde = "1.0.219"

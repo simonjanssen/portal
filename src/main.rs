@@ -1,16 +1,32 @@
 use anyhow::{Error, Result, anyhow};
-use image::DynamicImage;
+use core::f32;
+use image::{DynamicImage, GenericImage};
 use image::{GenericImageView, Rgba, imageops::FilterType};
-use ndarray::{s, Array1, Array3, Array4, ArrayBase, ArrayView1, Axis, Ix3};
+use imageproc::drawing::draw_hollow_rect_mut;
+use imageproc::rect::Rect;
+use ndarray::{Array1, Array3, Array4, ArrayBase, ArrayView1, Axis, s};
 use ort::execution_providers::{CUDAExecutionProvider, CoreMLExecutionProvider};
 use ort::inputs;
 use ort::session::{Session, SessionOutputs};
-use core::f32;
+use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 use std::time::Instant;
-use std::fs;
-use std::collections::HashMap;
-use std::cmp::Ordering;
+use std::env;
+
+const COLORS: [Rgba<u8>; 10] = [
+    Rgba([255, 153, 255, 255]), // More intense Magenta
+    Rgba([255, 153, 170, 255]), // More intense Pink
+    Rgba([255, 204, 153, 255]), // More intense Peach
+    Rgba([255, 255, 153, 255]), // More intense Yellow
+    Rgba([153, 255, 178, 255]), // More intense Mint Green
+    Rgba([153, 204, 255, 255]), // More intense Blue
+    Rgba([204, 153, 255, 255]), // More intense Lavender
+    Rgba([255, 153, 204, 255]), // More intense Rose
+    Rgba([204, 255, 153, 255]), // More intense Lime
+    Rgba([153, 255, 255, 255]), // More intense Cyan
+];
 
 fn xywh_to_xyxy(x: &f32, y: &f32, w: &f32, h: &f32) -> (f32, f32, f32, f32) {
     let x1 = x - w / 2.0;
@@ -23,7 +39,7 @@ fn xywh_to_xyxy(x: &f32, y: &f32, w: &f32, h: &f32) -> (f32, f32, f32, f32) {
 #[derive(Debug, Clone, Copy)]
 pub struct BoundingBox {
     pub x1: f32, // left
-    pub y1: f32, // top 
+    pub y1: f32, // top
     pub x2: f32, // right
     pub y2: f32, // bottom
     pub score: f32,
@@ -31,7 +47,6 @@ pub struct BoundingBox {
 }
 
 impl BoundingBox {
-
     /// center-x, center-y, width, height
     pub fn xywh(&self) -> (u32, u32, u32, u32) {
         let w = self.x2 - self.x1;
@@ -51,11 +66,7 @@ impl BoundingBox {
     pub fn area(&self) -> f32 {
         let w = self.x2 - self.x1;
         let h = self.y2 - self.y1;
-        if w > 0.0 && h > 0.0 {
-            w * h
-        } else {
-            0.0
-        }
+        if w > 0.0 && h > 0.0 { w * h } else { 0.0 }
     }
 
     pub fn iou(&self, other: &BoundingBox) -> f32 {
@@ -88,17 +99,23 @@ impl BoundingBox {
         let (class_idx, conf) = confs
             .iter()
             .enumerate()
-            .filter_map(|(idx, &num)| {
-                if num.is_nan() {
-                    None
-                } else {
-                    Some((idx, num))
-                }
-            })
+            .filter_map(
+                |(idx, &num)| {
+                    if num.is_nan() { None } else { Some((idx, num)) }
+                },
+            )
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal))
             .unwrap();
-        let (x1, y1, x2, y2) = xywh_to_xyxy(&bbox_xywh[0], &bbox_xywh[1], &bbox_xywh[2], &bbox_xywh[3]);
-        Self { x1, y1, x2, y2, score: conf, class_idx: class_idx as i32 }
+        let (x1, y1, x2, y2) =
+            xywh_to_xyxy(&bbox_xywh[0], &bbox_xywh[1], &bbox_xywh[2], &bbox_xywh[3]);
+        Self {
+            x1,
+            y1,
+            x2,
+            y2,
+            score: conf,
+            class_idx: class_idx as i32,
+        }
     }
 
     pub fn scale(&mut self, scale_w: f32, scale_h: f32) {
@@ -107,9 +124,7 @@ impl BoundingBox {
         self.x2 *= scale_w;
         self.y2 *= scale_h;
     }
-
 }
-
 
 pub struct ObjectDetection {
     pub image: DynamicImage,
@@ -121,7 +136,10 @@ pub struct ObjectDetection {
 
 impl ObjectDetection {
     pub fn from_path(path_image: &Path) -> Self {
-        let image = image::ImageReader::open(path_image).unwrap().decode().unwrap();
+        let image = image::ImageReader::open(path_image)
+            .unwrap()
+            .decode()
+            .unwrap();
         let target = (image.width() as f32, image.height() as f32);
         Self {
             image,
@@ -150,17 +168,14 @@ impl ObjectDetection {
 
     /// zero-copy implementation
     fn into_array(&self) -> Result<Array4<f32>, Error> {
-
         let (width, height) = (640, 640);
-        let buf_u8 = self.image
+        let buf_u8 = self
+            .image
             .resize_exact(width, height, FilterType::Triangle)
             .to_rgb8()
             .into_raw();
 
-        let buf_f32: Vec<f32> = buf_u8
-            .into_iter()
-            .map(|v| (v as f32) / 255.0)
-            .collect();
+        let buf_f32: Vec<f32> = buf_u8.into_iter().map(|v| (v as f32) / 255.0).collect();
 
         let arr4 = Array3::from_shape_vec((height as usize, width as usize, 3), buf_f32)
             .expect("buffer length mismatch") // todo: don't panic
@@ -171,9 +186,15 @@ impl ObjectDetection {
         Ok(arr4)
     }
 
-    pub fn run(&mut self, session: &Session, iou_thres: Option<f32>, conf_thres: Option<f32>, max_detect: Option<u32>) -> Result<(), Error> {
-        let iou_thres = iou_thres.unwrap_or(0.25);
-        let conf_thres = conf_thres.unwrap_or(0.5);
+    pub fn run(
+        &mut self,
+        session: &Session,
+        iou_thres: Option<f32>,
+        conf_thres: Option<f32>,
+        max_detect: Option<u32>,
+    ) -> Result<(), Error> {
+        let iou_thres = iou_thres.unwrap_or(0.7);
+        let conf_thres = conf_thres.unwrap_or(0.25);
         let max_detect = max_detect.unwrap_or(300);
 
         //let start = Instant::now();
@@ -189,13 +210,13 @@ impl ObjectDetection {
         let inputs = {
             match inputs!["images" => img_arr.view()] {
                 Ok(mapping) => mapping,
-                Err(e) => panic!("todo")
+                Err(e) => panic!("todo"),
             }
         };
         let outputs = session.run(inputs)?;
 
         // extract tensor
-        let output = outputs["output0"].try_extract_tensor::<f32>()?;  // assumes ONNX-model output is [BATCH_DIM, ]
+        let output = outputs["output0"].try_extract_tensor::<f32>()?; // assumes ONNX-model output is [BATCH_DIM, ]
         println!("{:?}", output.shape());
 
         let view_candidates = output.slice(s![0, 4.., ..]);
@@ -209,21 +230,22 @@ impl ObjectDetection {
         println!("mask_candidates: {:?}", mask_candidates.len());
 
         // get candidate rows
-        let idx_candidates: Vec<usize> = mask_candidates.iter()
+        let idx_candidates: Vec<usize> = mask_candidates
+            .iter()
             .enumerate()
-            .filter_map(|(i, &keep)| if keep { Some(i) } else { None } )
+            .filter_map(|(i, &keep)| if keep { Some(i) } else { None })
             .collect();
         println!("idx_candidates: {:?}", idx_candidates.len());
-        
+
         // select candidates = all detections with at least one class conf > conf_thres
-        let candidates_image = output.select(Axis(2), &idx_candidates).squeeze();  // todo: handle batch processing
+        let candidates_image = output.select(Axis(2), &idx_candidates).squeeze(); // todo: handle batch processing
         println!("candidates_image: {:?}", candidates_image.shape());
 
         // extract bboxes from output vectors
         let mut bboxes: Vec<BoundingBox> = Vec::with_capacity(candidates_image.len_of(Axis(1)));
         for (idx_candidate, candidate) in candidates_image.axis_iter(Axis(1)).enumerate() {
             //println!("\tshape for candidate {:?}: {:?}", idx_candidate, candidate.shape());
-            let bbox = BoundingBox::from_array(candidate.to_shape(candidate.len(),).unwrap().view());
+            let bbox = BoundingBox::from_array(candidate.to_shape(candidate.len()).unwrap().view());
             bboxes.push(bbox);
         }
         println!("len bboxes: {:?}", bboxes.len());
@@ -232,7 +254,7 @@ impl ObjectDetection {
         let mut bboxes = nms(&bboxes, iou_thres);
         bboxes.truncate(max_detect as usize); // keep only max detections
         println!("len bboxes nms: {:?}", bboxes.len());
-        
+
         // scale boxes to original image dims
         let (base_w, base_h) = self.base;
         let (target_w, target_h) = self.target;
@@ -252,7 +274,7 @@ impl ObjectDetection {
                 for (b, bbox) in bboxes.iter().enumerate() {
                     let (x, y, w, h) = bbox.x1y1wh();
                     let cropped = &self.image.crop_imm(x, y, w, h);
-                    let filename = format!("{:?}.jpg", b);
+                    let filename = format!("{:?}.png", b);
                     let path = Path::new(&filename);
                     cropped.save(path)?;
                 }
@@ -262,11 +284,34 @@ impl ObjectDetection {
         Ok(())
     }
 
+    fn annotate(&mut self) -> Result<(), Error> {
+        let img_d = self.image.width().min(self.image.height());
+        let thickness = 15.0 / 3726. * (img_d as f64); // scale thickness by smaller image edge
+        let thickness = (thickness as u32).max(1);
+        match &self.bboxes {
+            Some(bboxes) => {
+                for bbox in bboxes.iter() {
+                    let box_color = COLORS[(bbox.class_idx as usize) % COLORS.len()];
+                    let (x1, y1, w, h) = bbox.x1y1wh();
+                    for t in 0..thickness {
+                        let x = x1 - t;
+                        let y = y1 - t;
+                        let w = w + 2*t;
+                        let h = h + 2*t;
+                        let rect = Rect::at(x as i32, y as i32).of_size(w as u32, h as u32);
+                        draw_hollow_rect_mut(&mut self.image, rect, box_color);
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
 }
 
 /// Class-Sensitive Non Maxima Suppression for Overlapping Bounding Boxes
 /// Iteratively removes lower scoring bboxes which have an IoU above iou_thresold.
-/// Inspired by: https://pytorch.org/vision/master/_modules/torchvision/ops/boxes.html#nms 
+/// Inspired by: https://pytorch.org/vision/master/_modules/torchvision/ops/boxes.html#nms
 pub fn nms(boxes: &[BoundingBox], iou_threshold: f32) -> Vec<BoundingBox> {
     if boxes.is_empty() {
         return Vec::new();
@@ -297,11 +342,8 @@ pub fn nms(boxes: &[BoundingBox], iou_threshold: f32) -> Vec<BoundingBox> {
         .collect();
 
     // Sort boxes in decreasing order based on scores
-    boxes_shifted.sort_unstable_by(|a, b| {
-        b.0.score
-            .partial_cmp(&a.0.score)
-            .unwrap_or(Ordering::Equal)
-    });
+    boxes_shifted
+        .sort_unstable_by(|a, b| b.0.score.partial_cmp(&a.0.score).unwrap_or(Ordering::Equal));
 
     let mut keep_indices = Vec::new();
 
@@ -320,20 +362,15 @@ pub fn nms(boxes: &[BoundingBox], iou_threshold: f32) -> Vec<BoundingBox> {
         .collect();
 
     // Sort the kept boxes in decreasing order of their scores
-    kept_boxes.sort_unstable_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(Ordering::Equal)
-    });
+    kept_boxes.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
 
     kept_boxes
-
 }
 
 fn get_classes(path_json: &Path) -> Result<HashMap<i32, String>, Error> {
     let content = fs::read_to_string(path_json)?;
     let classes: HashMap<String, String> = serde_json::from_str(&content)?;
-    let mapping: HashMap<i32, String> = classes 
+    let mapping: HashMap<i32, String> = classes
         .into_iter()
         .filter_map(|(k, v)| k.parse::<i32>().ok().map(|ik| (ik, v)))
         .collect();
@@ -348,7 +385,7 @@ fn get_onnx_session(path_onnx: &Path) -> Result<Session, Error> {
     Ok(session)
 }
 
-fn run_yolo() -> Result<(), Error> {
+fn run_yolo(model_name: &str, path_image: &str) -> Result<(), Error> {
     ort::init()
         .with_execution_providers([
             CUDAExecutionProvider::default().build(),
@@ -357,26 +394,31 @@ fn run_yolo() -> Result<(), Error> {
         .commit()?;
 
     let start = Instant::now();
-    let path_onnx = Path::new("./yolo11n.onnx");
-    let path_json = Path::new("./yolo11n.json");
-    let session = get_onnx_session(path_onnx).unwrap();
-    let classes = get_classes(path_json).unwrap();
+    let path_onnx = format!("./{}.onnx", model_name);
+    let path_json = format!("./{}.json", model_name);
+    let session = get_onnx_session(Path::new(&path_onnx))?;
+    let classes = get_classes(Path::new(&path_json))?;
     let dt = start.elapsed();
     println!("[session load] {:?}", dt);
 
     let start = Instant::now();
-    let path_image = Path::new("./images/bus.jpg");
-    let mut object_detection = ObjectDetection::from_path(path_image);
+    let mut object_detection = ObjectDetection::from_path(Path::new(path_image));
     let dt = start.elapsed();
     println!("[model input] {:?}", dt);
 
     let start = Instant::now();
-    object_detection.run(&session, None, None, None).unwrap();
+    object_detection.run(&session, None, None, None)?;
     let dt = start.elapsed();
     println!("[inference] {:?}", dt);
 
     let start = Instant::now();
-    object_detection.save().unwrap();
+    object_detection.save()?;
+    let dt = start.elapsed();
+    println!("[store results] {:?}", dt);
+
+    let start = Instant::now();
+    object_detection.annotate()?;
+    object_detection.image.save("./result.png")?;
     let dt = start.elapsed();
     println!("[store results] {:?}", dt);
 
@@ -406,12 +448,11 @@ fn get_timm_image(path_image: &Path) -> Result<Array4<f32>, Error> {
     let dt = start.elapsed();
     println!("[tensor] {:?}", dt);
     Ok(tensor)
-
 }
 
 fn softmax(input_array: ArrayView1<f32>) -> Result<Array1<f32>, Error> {
     let max_value = input_array.fold(f32::NEG_INFINITY, |a, &b| a.max(b));
-    let exp_shifted = input_array.mapv(|x| (x-max_value).exp());
+    let exp_shifted = input_array.mapv(|x| (x - max_value).exp());
     let sum_exp = exp_shifted.sum();
     Ok(exp_shifted / sum_exp)
 }
@@ -478,10 +519,17 @@ fn run_timm() -> Result<(), Error> {
     Ok(())
 }
 
-
-
 fn main() -> Result<()> {
-    run_yolo().unwrap();
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 3 {
+        eprintln!("invalid args");
+        std::process::exit(1);
+    }
+    let model_name = &args[1];
+    let image_path = &args[2];
+    println!("model: {}, image: {}", model_name, image_path);
+
+    run_yolo(model_name, image_path).unwrap();
     //run_timm().unwrap();
     Ok(())
 }

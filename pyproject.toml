@@ -1,5 +1,5 @@
 [project]
-name = "playgrounds-onnx"
+name = "onnx-inference-rust"
 version = "0.0.1"
 description = ""
 authors = [
