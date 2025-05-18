@@ -20,8 +20,9 @@ def main():
     print(output.shape)
 
     probabilities = torch.nn.functional.softmax(output[0], dim=0)
-    values, indices = torch.topk(probabilities, 5)
-    print(indices, values)
+    values, indices = torch.topk(probabilities, 10)
+    for class_idx, class_prob in zip(indices, values):
+        print(f"class_idx: {class_idx}, class_prob: {class_prob:.6f}")
 
 
 if __name__ == "__main__":

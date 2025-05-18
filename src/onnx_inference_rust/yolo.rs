@@ -6,7 +6,7 @@ use std::time::Instant;
 use crate::onnx_inference_rust::commons::{get_classes, get_onnx_session};
 use crate::onnx_inference_rust::detection::ObjectDetection;
 
-pub fn run_yolo(model_name: &str, path_image: &str) -> Result<(), Error> {
+pub fn run_yolo(path_onnx: &str, path_image: &str) -> Result<(), Error> {
     ort::init()
         .with_execution_providers([
             CUDAExecutionProvider::default().build(),
@@ -15,10 +15,7 @@ pub fn run_yolo(model_name: &str, path_image: &str) -> Result<(), Error> {
         .commit()?;
 
     let start = Instant::now();
-    let path_onnx = format!("./{}.onnx", model_name);
-    let path_json = format!("./{}.json", model_name);
-    let session = get_onnx_session(Path::new(&path_onnx))?;
-    let classes = get_classes(Path::new(&path_json))?;
+    let session = get_onnx_session(Path::new(path_onnx))?;
     let dt = start.elapsed();
     println!("[session load] {:?}", dt);
 

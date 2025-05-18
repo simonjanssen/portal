@@ -6,16 +6,16 @@ use std::fs;
 use std::path::Path;
 
 pub const COLORS: [Rgba<u8>; 10] = [
-    Rgba([255, 153, 255, 255]), // More intense Magenta
-    Rgba([255, 153, 170, 255]), // More intense Pink
-    Rgba([255, 204, 153, 255]), // More intense Peach
-    Rgba([255, 255, 153, 255]), // More intense Yellow
-    Rgba([153, 255, 178, 255]), // More intense Mint Green
-    Rgba([153, 204, 255, 255]), // More intense Blue
-    Rgba([204, 153, 255, 255]), // More intense Lavender
-    Rgba([255, 153, 204, 255]), // More intense Rose
-    Rgba([204, 255, 153, 255]), // More intense Lime
-    Rgba([153, 255, 255, 255]), // More intense Cyan
+    Rgba([204, 102, 204, 255]), // Darker Magenta
+    Rgba([204, 102, 136, 255]), // Darker Pink
+    Rgba([204, 163, 102, 255]), // Darker Peach
+    Rgba([204, 204, 102, 255]), // Darker Yellow
+    Rgba([102, 204, 142, 255]), // Darker Mint Green
+    Rgba([102, 163, 204, 255]), // Darker Blue
+    Rgba([163, 102, 204, 255]), // Darker Lavender
+    Rgba([204, 102, 153, 255]), // Darker Rose
+    Rgba([163, 204, 102, 255]), // Darker Lime
+    Rgba([102, 204, 204, 255]), // Darker Cyan
 ];
 
 pub fn get_onnx_session(path_onnx: &Path) -> Result<Session, Error> {

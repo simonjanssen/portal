@@ -14,7 +14,7 @@ fn main() -> Result<()> {
     let path_image = &args[2];
     println!("model: {}, image: {}", model_name, path_image);
 
-    //run_yolo(model_name, image_path).unwrap();
+    //run_yolo(model_name, path_image).unwrap();
     run_timm(model_name, path_image)?;
     Ok(())
 }

@@ -1,6 +1,6 @@
 use anyhow::{Error, Result};
 use image::{DynamicImage, GenericImageView, Rgba, imageops::FilterType};
-use imageproc::drawing::draw_hollow_rect_mut;
+use imageproc::drawing::{draw_hollow_rect_mut, draw_text_mut};
 use imageproc::rect::Rect;
 use ndarray::{Array1, Array3, Array4, ArrayBase, ArrayView1, Axis, s};
 use ort::inputs;
@@ -9,8 +9,10 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Instant;
+use ab_glyph::{Font, FontArc, ScaleFont};
 
 use crate::onnx_inference_rust::commons::COLORS;
+use crate::onnx_inference_rust::commons::get_classes;
 
 pub struct ObjectDetection {
     pub image: DynamicImage,
@@ -27,6 +29,8 @@ impl ObjectDetection {
             .decode()
             .unwrap();
         let target = (image.width() as f32, image.height() as f32);
+        //let path_classes = Path::new("./checkpoints/yolo_v11/yolo11n.json");
+        //let classes = get_classes(path_classes).unwrap();
         Self {
             image,
             target,
@@ -151,8 +155,12 @@ impl ObjectDetection {
 
     pub fn annotate(&mut self) -> Result<(), Error> {
         let img_d = self.image.width().min(self.image.height());
-        let thickness = 15.0 / 3726. * (img_d as f64); // scale thickness by smaller image edge
+        let thickness = 15.0 / 3726. * (img_d as f32); // scale thickness by smaller image edge
         let thickness = (thickness as u32).max(1);
+        let font_data = include_bytes!("../../assets/DejaVuSans.ttf");
+        let font = FontArc::try_from_slice(font_data as &[u8]).unwrap();
+        let scale = 100.0 / 3726. * (img_d as f32);
+        let offset = (scale * 1.1) as u32;
         match &self.bboxes {
             Some(bboxes) => {
                 for bbox in bboxes.iter() {
@@ -166,6 +174,25 @@ impl ObjectDetection {
                         let rect = Rect::at(x as i32, y as i32).of_size(w as u32, h as u32);
                         draw_hollow_rect_mut(&mut self.image, rect, box_color);
                     }
+
+                    let label = match &self.classes {
+                        Some(classes) => {
+                            format!("{} ({:.2})", classes[&bbox.class_idx], bbox.score)
+                        },
+                        _ => {
+                            format!("class {} ({:.2})", bbox.class_idx, bbox.score)
+                        }
+                    };
+                    println!("{}", label);
+                    draw_text_mut(
+                        &mut self.image, 
+                        box_color, 
+                        x1 as i32, 
+                        (y1 - offset) as i32, 
+                        scale, 
+                        &font, 
+                        &label
+                    );
                 }
             }
             _ => {}

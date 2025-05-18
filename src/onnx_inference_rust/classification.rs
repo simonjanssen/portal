@@ -1,6 +1,6 @@
 use anyhow::{Error, Result, anyhow};
 use image::ImageReader;
-use image::{DynamicImage, GenericImageView, Rgba, imageops::FilterType};
+use image::{DynamicImage, GenericImageView, Rgba, imageops::FilterType, RgbImage};
 use ndarray::{Array1, Array3, Array4, ArrayBase, ArrayView1, Axis, s};
 use ort::execution_providers::{CUDAExecutionProvider, CoreMLExecutionProvider};
 use ort::inputs;
@@ -31,68 +31,97 @@ fn img_to_arr(
     arr_height: u32,
     crop_pct: f32,
 ) -> Result<Array4<f32>, Error> {
-    let arr_width_f = arr_width as f32;
-    let arr_height_f = arr_height as f32;
-
-    let resize_width = arr_width_f / crop_pct;
-    let resize_height = arr_height_f / crop_pct;
-    println!("{:?}, {:?}", resize_width, resize_height);
 
     let (img_width, img_height) = img.dimensions(); 
-
-    let resize_width = if img_width > img_height {
-        resize_width * (img_width as f32 / img_height as f32)
+    let buf_u8 = if (img_width == arr_width) && (img_height == arr_height) {
+        img.to_rgb8().into_raw()
     } else {
-        resize_width
+        let arr_width_f = arr_width as f32;
+        let arr_height_f = arr_height as f32;
+
+        let resize_width = arr_width_f / crop_pct;
+        let resize_height = arr_height_f / crop_pct;
+        
+        let resize_width = if img_width > img_height {
+            resize_width * (img_width as f32 / img_height as f32)
+        } else {
+            resize_width
+        };
+
+        let resize_height = if img_height > img_width {
+            resize_height * ( img_height as f32 / img_width as f32)
+        } else {
+            resize_height
+        };
+        println!("{:?}, {:?}", resize_width, resize_height);
+
+        //let resize_width = 256.;
+        //let resize_height = 256.;
+
+        let x = (resize_width - arr_width_f) / 2.0;
+        let y = (resize_height - arr_height_f) / 2.0;
+
+        // first resize, then crop a centered square from resized such that cropped/resized = crop_pct and cropped = ONNX input shape
+        println!("{:?}", img.dimensions());
+        let img_resized = img
+            .resize(
+                resize_width as u32,
+                resize_height as u32,
+                FilterType::CatmullRom,
+            );
+        println!("{:?}", img_resized.dimensions());
+        img_resized.save("./resized.jpg")?;
+
+        let img_cropped = img_resized
+            .crop_imm(x as u32, y as u32, arr_width, arr_height);
+        println!("{:?}", img_cropped.dimensions());
+        img_cropped.save("./cropped.jpg")?;
+
+        img_cropped.into_rgb8().into_raw()
     };
 
-    let resize_height = if img_height > img_width {
-        resize_height * ( img_height as f32 / img_width as f32)
-    } else {
-        resize_height
-    };
-
-    //let resize_width = 256.;
-    //let resize_height = 256.;
-
-    let x = (resize_width - arr_width_f) / 2.0;
-    let y = (resize_height - arr_height_f) / 2.0;
-
-    // first resize, then crop a centered square from resized such that cropped/resized = crop_pct and cropped = ONNX input shape
-    println!("{:?}", img.dimensions());
-    let img_resized = img
-        .resize(
-            resize_width as u32,
-            resize_height as u32,
-            FilterType::Triangle,
-        );
-    println!("{:?}", img_resized.dimensions());
-    img_resized.save("./resized.jpg")?;
-
-    let img_cropped = img_resized
-        .crop_imm(x as u32, y as u32, arr_width, arr_height);
-    println!("{:?}", img_cropped.dimensions());
-    img_cropped.save("./cropped.jpg")?;
-    
-    let buf_u8 = img_cropped
-        .to_rgb8()
-        .into_raw();
-
-    // normalize image
-    let mut buf_f32 = Vec::with_capacity(buf_u8.len());
     let mean_rgb = [0.4850, 0.4560, 0.4060];
     let std_rgb = [0.2290, 0.2240, 0.2250];
-    for (i, &v) in buf_u8.iter().enumerate() {
-        let channel = i % 3;
-        let norm_val = (((v as f32) / 255.0) - mean_rgb[channel]) / std_rgb[channel];
-        buf_f32.push(norm_val);
-    }
 
-    // reshape to 3d-array
-    let arr4 = Array3::from_shape_vec((arr_height as usize, arr_width as usize, 3), buf_f32)?
-        .permuted_axes([2, 0, 1])
-        .insert_axis(Axis(0));
-    Ok(arr4)
+    // normalize image
+    let start = Instant::now();
+    let arr = if false {
+        println!("--- for ---");
+        let mut buf_f32 = Vec::with_capacity(buf_u8.len());
+        
+
+        for (i, &v) in buf_u8.iter().enumerate() {
+            let channel = i % 3;
+            let norm_val = (((v as f32) / 255.0) - mean_rgb[channel]) / std_rgb[channel];
+            buf_f32.push(norm_val);
+        }
+
+        // reshape to 3d-array
+        let arr4 = Array3::from_shape_vec((arr_height as usize, arr_width as usize, 3), buf_f32)?
+            .permuted_axes([2, 0, 1])
+            .insert_axis(Axis(0));
+        arr4
+
+    } else {
+        let buf_f32: Vec<f32> = buf_u8.iter().map(|&v| (v as f32) / 255.0).collect();
+        let arr3 = Array3::from_shape_vec((arr_height as usize, arr_width as usize, 3), buf_f32)?;
+
+        // Normalize per channel
+        let mut arr3 = arr3; // make mutable
+        for c in 0..3 {
+            arr3.slice_mut(s![.., .., c]).map_inplace(|x| {
+                *x = (*x - mean_rgb[c]) / std_rgb[c];
+            });
+        }
+
+        let arr4 = arr3
+            .permuted_axes([2, 0, 1])
+            .insert_axis(Axis(0));
+        arr4
+    };
+    let dt = start.elapsed();
+    println!("[normalize] {:?}", dt);
+    Ok(arr)
 }
 
 pub fn softmax(input_array: ArrayView1<f32>) -> Result<Array1<f32>, Error> {
@@ -129,7 +158,7 @@ pub fn get_timm_predictions(outputs: SessionOutputs, output_name: &str) -> Resul
 
     predictions.sort_by(| a, b| b.class_prob.partial_cmp(&a.class_prob).unwrap());
 
-    for prediction in predictions.iter().take(5) {
+    for prediction in predictions.iter().take(10) {
         println!("{:?}", &prediction);
     }
 
@@ -154,14 +183,16 @@ pub fn run_timm(model_name: &str, path_image: &str) -> Result<(), Error> {
     let dt = start.elapsed();
     println!("[session load] {:?}", dt);
 
-    let start = Instant::now();
+    
     let path_image = Path::new(path_image);
     let img = ImageReader::open(path_image)?.decode()?;
+    //let img = img.resize_exact(, 224, FilterType::CatmullRom);
+    let start = Instant::now();
     let tensor_in = img_to_arr(&img, input_width, input_height, 0.875)?;
-    let inputs = inputs![&input_name => tensor_in.view()]?;
     let dt = start.elapsed();
-    println!("[model input] {:?}", dt);
-
+    println!("[img_to_arr] {:?}", dt);
+    let inputs = inputs![&input_name => tensor_in.view()]?;
+    
     let start = Instant::now();
     let outputs = session.run(inputs)?;
     let dt = start.elapsed();
