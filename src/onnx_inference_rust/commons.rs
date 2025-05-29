@@ -1,9 +1,12 @@
 use anyhow::{Error, Result, anyhow};
-use image::Rgba;
+use image::{DynamicImage, Rgba};
 use ort::session::Session;
+use ort::session::{SessionInputValue, SessionOutputs};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+
+use std::borrow::Cow;
 
 pub const COLORS: [Rgba<u8>; 10] = [
     Rgba([204, 102, 204, 255]), // Darker Magenta
@@ -18,8 +21,22 @@ pub const COLORS: [Rgba<u8>; 10] = [
     Rgba([102, 204, 204, 255]), // Darker Cyan
 ];
 
+pub trait ExecutionLogic {
+    type Prediction;
+    fn make_inputs(
+        &self,
+        img: &DynamicImage,
+    ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error>;
+    fn make_results(&self, outputs: SessionOutputs<'_, '_>) -> Result<Self::Prediction, Error>;
+    fn run(&self, img: &DynamicImage, session: &Session) -> Result<Self::Prediction, Error> {
+        let session_inputs = self.make_inputs(img)?;
+        let session_outputs = session.run(session_inputs)?;
+        self.make_results(session_outputs)
+    }
+}
+
 pub fn get_onnx_session(path_onnx: &Path) -> Result<Session, Error> {
-    let session = Session::builder()?.commit_from_file(&path_onnx)?;
+    let session = Session::builder()?.commit_from_file(path_onnx)?;
     Ok(session)
 }
 
@@ -36,6 +53,7 @@ pub fn get_classes(path_json: &Path) -> Result<HashMap<i32, String>, Error> {
 /// Determine input-tensor name and shape to resize our images accordingly
 /// For simplicity, we are assuming that the first tensor is the image-related one.
 pub fn determine_onnx_input(session: &Session) -> Result<(String, u32, u32), Error> {
+    println!("{:?}", &session.inputs);
     for input in &session.inputs {
         if let Some(dims) = input.input_type.tensor_dimensions() {
             let d = dims.len();
@@ -52,13 +70,14 @@ pub fn determine_onnx_input(session: &Session) -> Result<(String, u32, u32), Err
 
 /// Determine output-tensor name to extract as array
 /// For simplicity, we are assuming that the first tensor is the prediction-related one.
-pub fn determine_onnx_output(session: &Session) -> Result<String, Error> {
+pub fn determine_onnx_output(session: &Session) -> Result<(String, u32, u32), Error> {
+    println!("{:?}", &session.outputs);
     for output in &session.outputs {
         if let Some(dims) = output.output_type.tensor_dimensions() {
             let d = dims.len();
             if d > 1 {
                 let (w, h) = (dims[d - 2], dims[d - 1]);
-                return Ok(String::from(&output.name));
+                return Ok((String::from(&output.name), w as u32, h as u32));
             }
         }
     }
