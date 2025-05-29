@@ -8,12 +8,12 @@ use super::dfine::DfineLike;
 use super::timm::TimmLike;
 use super::yolo::YoloLike;
 
-static TIMM_INPUTS: [&str; 2] = ["images", "orig_target_sizes"];
-static TIMM_OUTPUTS: [&str; 3] = ["labels", "boxes", "scores"];
 static DFINE_INPUTS: [&str; 2] = ["images", "orig_target_sizes"];
 static DFINE_OUTPUTS: [&str; 3] = ["labels", "boxes", "scores"];
 static YOLO_INPUTS: [&str; 1] = ["images"];
 static YOLO_OUTPUTS: [&str; 1] = ["output0"];
+static TIMM_INPUTS: [&str; 1] = ["input0"];
+static TIMM_OUTPUTS: [&str; 1] = ["output0"];
 
 pub enum Provider {
     DfineLike(DfineLike),

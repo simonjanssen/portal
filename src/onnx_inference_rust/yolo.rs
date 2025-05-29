@@ -33,7 +33,7 @@ impl ObjectDetection for YoloLike {
         outputs: ort::session::SessionOutputs<'_, '_>,
         conf_thres: f32,
         iou_thres: f32,
-        max_detect: u32,
+        max_detect: usize,
     ) -> Result<Vec<BoundingBox>, Error> {
         let output = outputs["output0"].try_extract_tensor::<f32>()?;
         let view_candidates = output.slice(s![0, 4.., ..]);
@@ -54,7 +54,7 @@ impl ObjectDetection for YoloLike {
             bboxes.push(bbox);
         }
         let mut bboxes = nms(&bboxes, iou_thres);
-        bboxes.truncate(max_detect as usize); // keep only max detections
+        bboxes.truncate(max_detect); // keep only max detections
         println!("len bboxes nms: {:?}", bboxes.len());
         Ok(bboxes)
     }
@@ -65,7 +65,7 @@ impl ObjectDetection for YoloLike {
         img: &DynamicImage,
         conf_thres: f32,
         iou_thres: f32,
-        max_detect: u32,
+        max_detect: usize,
     ) -> Result<Vec<BoundingBox>, Error> {
         let session_inputs = self.make_inputs(img)?;
         let session_outputs = session.run(session_inputs)?;

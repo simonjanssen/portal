@@ -32,12 +32,12 @@ impl ObjectDetection for DfineLike {
         outputs: SessionOutputs<'_, '_>,
         _conf_thres: f32,
         _iou_thres: f32,
-        max_detect: u32,
+        max_detect: usize,
     ) -> Result<Vec<BoundingBox>, Error> {
         let labels = outputs["labels"].try_extract_tensor::<i64>()?;
         let boxes = outputs["boxes"].try_extract_tensor::<f32>()?;
         let scores = outputs["scores"].try_extract_tensor::<f32>()?;
-        let bboxes: Vec<BoundingBox> = boxes
+        let mut bboxes: Vec<BoundingBox> = boxes
             .axis_iter(Axis(1))
             .enumerate()
             .map(|(i, bbox)| {
@@ -55,6 +55,12 @@ impl ObjectDetection for DfineLike {
                 }
             })
             .collect();
+        bboxes.sort_unstable_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        bboxes.truncate(max_detect);
         Ok(bboxes)
     }
 }

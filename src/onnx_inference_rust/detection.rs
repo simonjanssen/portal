@@ -16,7 +16,7 @@ pub trait ObjectDetection {
         outputs: SessionOutputs<'_, '_>,
         conf_thres: f32,
         iou_thres: f32,
-        max_detect: u32,
+        max_detect: usize,
     ) -> Result<Vec<BoundingBox>, Error>;
     fn run(
         &self,
@@ -24,7 +24,7 @@ pub trait ObjectDetection {
         img: &DynamicImage,
         conf_thres: f32,
         iou_thres: f32,
-        max_detect: u32,
+        max_detect: usize,
     ) -> Result<Vec<BoundingBox>, Error> {
         let session_inputs = self.make_inputs(img)?;
         let session_outputs = session.run(session_inputs)?;

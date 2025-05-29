@@ -26,7 +26,7 @@ impl Classification for TimmLike {
     > {
         let images = img_to_arr(img, self.input_width, self.input_height, crop_pct)?;
         let session_inputs = inputs! {
-            "images" => images.view(),
+            "input0" => images.view(),
         }?;
         Ok(session_inputs)
     }
@@ -36,10 +36,8 @@ impl Classification for TimmLike {
         outputs: SessionOutputs<'_, '_>,
         apply_softmax: bool,
     ) -> Result<Vec<ClassPrediction>, Error> {
-        let output = outputs["output"].try_extract_tensor::<f32>()?;
-        println!("{:?}", output.shape());
+        let output = outputs["output0"].try_extract_tensor::<f32>()?;
         let output = output.reversed_axes();
-        println!("{:?}", output.shape());
         let output = output.slice(s![.., 0]);
         println!("{:?}", output.shape());
         let output = if apply_softmax {
