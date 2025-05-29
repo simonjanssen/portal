@@ -21,27 +21,42 @@ pub enum Provider {
     TimmLike(TimmLike),
 }
 
-pub fn determine_provider(session: &Session) -> Option<Provider> {
+pub fn determine_provider(session: &Session) -> Result<Provider, Error> {
     let input_names: Vec<&str> = session.inputs.iter().map(|i| i.name.as_str()).collect();
     let output_names: Vec<&str> = session.outputs.iter().map(|o| o.name.as_str()).collect();
     println!("{:?} | {:?}", input_names, output_names);
     if input_names == DFINE_INPUTS && output_names == DFINE_OUTPUTS {
-        Some(Provider::DfineLike(DfineLike {
-            input_width: 640,
-            input_height: 640,
+        let (input_width, input_height) = determine_input_shape(session, "images")?;
+        println!(
+            "Model is DfineLike with input shape ({},{})",
+            input_width, input_height
+        );
+        Ok(Provider::DfineLike(DfineLike {
+            input_width,
+            input_height,
         }))
     } else if input_names == YOLO_INPUTS && output_names == YOLO_OUTPUTS {
-        Some(Provider::YoloLike(YoloLike {
-            input_width: 640,
-            input_height: 640,
+        let (input_width, input_height) = determine_input_shape(session, "images")?;
+        println!(
+            "Model is YoloLike with input shape ({},{})",
+            input_width, input_height
+        );
+        Ok(Provider::YoloLike(YoloLike {
+            input_width,
+            input_height,
         }))
     } else if input_names == TIMM_INPUTS && output_names == TIMM_OUTPUTS {
-        Some(Provider::TimmLike(TimmLike {
-            input_width: 224,
-            input_height: 224,
+        let (input_width, input_height) = determine_input_shape(session, "input0")?;
+        println!(
+            "Model is TimmLike with input shape ({},{})",
+            input_width, input_height
+        );
+        Ok(Provider::TimmLike(TimmLike {
+            input_width,
+            input_height,
         }))
     } else {
-        None
+        Err(anyhow!("Failed to determine provider!"))
     }
 }
 
@@ -60,22 +75,21 @@ pub fn get_classes(path_json: &Path) -> Result<HashMap<i32, String>, Error> {
     Ok(mapping)
 }
 
-/// Determine input-tensor name and shape to resize our images accordingly
-/// For simplicity, we are assuming that the first tensor is the image-related one.
-pub fn determine_onnx_input(session: &Session) -> Result<(String, u32, u32), Error> {
+/// Determine input-tensor shape to resize our images accordingly
+pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32, u32), Error> {
     println!("{:?}", &session.inputs);
     for input in &session.inputs {
-        if let Some(dims) = input.input_type.tensor_dimensions() {
-            let d = dims.len();
-            if d > 1 {
-                let (w, h) = (dims[d - 2], dims[d - 1]);
-                return Ok((String::from(&input.name), w as u32, h as u32));
+        if input.name == input_name {
+            if let Some(dims) = input.input_type.tensor_dimensions() {
+                let d = dims.len();
+                if d > 1 {
+                    let (w, h) = (dims[d - 2], dims[d - 1]);
+                    return Ok((w as u32, h as u32));
+                }
             }
         }
     }
-    Err(anyhow!(
-        "Failed to determine ONNX model input - no input tensor found!"
-    ))
+    Err(anyhow!("Failed to determine input shape!"))
 }
 
 /// Determine output-tensor name to extract as array

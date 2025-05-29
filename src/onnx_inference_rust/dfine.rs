@@ -30,7 +30,7 @@ impl ObjectDetection for DfineLike {
     fn make_results(
         &self,
         outputs: SessionOutputs<'_, '_>,
-        _conf_thres: f32,
+        conf_thres: f32,
         _iou_thres: f32,
         max_detect: usize,
     ) -> Result<Vec<BoundingBox>, Error> {
@@ -54,6 +54,7 @@ impl ObjectDetection for DfineLike {
                     y2,
                 }
             })
+            .filter(|b| b.score > conf_thres)
             .collect();
         bboxes.sort_unstable_by(|a, b| {
             b.score

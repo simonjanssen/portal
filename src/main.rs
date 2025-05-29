@@ -1,4 +1,4 @@
-use anyhow::{Error, Result, anyhow};
+use anyhow::{Error, Result};
 use clap::Parser;
 use image::ImageReader;
 use onnx_inference_rust::onnx_inference_rust::commons::Provider;
@@ -31,17 +31,20 @@ fn main() -> Result<(), Error> {
     let img = ImageReader::open(path_img)?.decode()?;
 
     let session = get_onnx_session(Path::new(&path_onnx))?;
-    let provider = determine_provider(&session).ok_or(anyhow!("Unknown Provider!"))?;
+    let provider = determine_provider(&session)?;
 
     match provider {
         Provider::DfineLike(model) => {
             let prediction = model.run(&session, &img, 0.25, 0.7, 300)?;
+            println!("{:?}", prediction.len())
         }
         Provider::YoloLike(model) => {
             let prediction = model.run(&session, &img, 0.25, 0.7, 300)?;
+            println!("{:?}", prediction.len())
         }
         Provider::TimmLike(model) => {
             let prediction = model.run(&session, &img, 0.875, true)?;
+            println!("{:?}", prediction.len())
         }
     }
 
