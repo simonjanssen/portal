@@ -1,64 +1,35 @@
-use ab_glyph::{FontArc, ScaleFont};
 use anyhow::{Error, Result};
-use image::{DynamicImage, GenericImageView};
-use imageproc::drawing::{draw_hollow_rect_mut, draw_text_mut};
-use imageproc::rect::Rect;
+use image::DynamicImage;
 use ndarray::{ArrayView1, s};
 use ort::session::Session;
+use ort::session::{SessionInputValue, SessionOutputs};
+use std::borrow::Cow;
 use std::cmp::Ordering;
 
-use crate::onnx_inference_rust::commons::COLORS;
-
-use super::commons::ExecutionLogic;
-use super::dfine::DfineLike;
-use super::yolo::YoloLike;
-
-// manually determined scale factors to print annotations / draw boxes
-const SCALE_THICKNESS: f32 = 15. / 3726.;
-const SCALE_FONT: f32 = 100. / 3726.;
-
-pub type Detector = dyn ExecutionLogic<Prediction = Vec<BoundingBox>>;
-
-static DFINE_INPUTS: [&str; 2] = ["images", "orig_target_sizes"];
-static DFINE_OUTPUTS: [&str; 3] = ["labels", "boxes", "scores"];
-
-static YOLO_INPUTS: [&str; 1] = ["images"];
-static YOLO_OUTPUTS: [&str; 1] = ["output0"];
-
-pub enum Provider {
-    DfineLike(DfineLike),
-    YoloLike(YoloLike),
-}
-
-impl Provider {
-    fn run(img: ) {
-        match self {
-            Provider::DfineLike(dfine) => {
-                dfine.run(img, session)
-            }
-        }
+pub trait ObjectDetection {
+    fn make_inputs(
+        &self,
+        img: &DynamicImage,
+    ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error>;
+    fn make_results(
+        &self,
+        outputs: SessionOutputs<'_, '_>,
+        conf_thres: f32,
+        iou_thres: f32,
+        max_detect: u32,
+    ) -> Result<Vec<BoundingBox>, Error>;
+    fn run(
+        &self,
+        session: &Session,
+        img: &DynamicImage,
+        conf_thres: f32,
+        iou_thres: f32,
+        max_detect: u32,
+    ) -> Result<Vec<BoundingBox>, Error> {
+        let session_inputs = self.make_inputs(img)?;
+        let session_outputs = session.run(session_inputs)?;
+        self.make_results(session_outputs, conf_thres, iou_thres, max_detect)
     }
-}
-
-pub fn determine_provider(session: &Session) -> Option<Provider> {
-    let input_names: Vec<&str> = session.inputs.iter().map(|i| i.name.as_str()).collect();
-    let output_names: Vec<&str> = session.outputs.iter().map(|o| o.name.as_str()).collect();
-    println!("{:?} | {:?}", input_names, output_names);
-    if input_names == DFINE_INPUTS && output_names == DFINE_OUTPUTS {
-        Some(Provider::DfineLike)
-    } else if input_names == YOLO_INPUTS && output_names == YOLO_OUTPUTS {
-        Some(Provider::YoloLike)
-    } else {
-        None
-    }
-}
-
-fn xywh_to_xyxy(x: &f32, y: &f32, w: &f32, h: &f32) -> (f32, f32, f32, f32) {
-    let x1 = x - w / 2.0;
-    let y1 = y - h / 2.0;
-    let x2 = x + w / 2.0;
-    let y2 = y + h / 2.0;
-    (x1, y1, x2, y2)
 }
 
 #[derive(Default, Clone, Debug, Copy)]
@@ -151,41 +122,65 @@ impl BoundingBox {
     }
 }
 
-/// # Draw Rectangles
-/// Draws hollow rectangles onto input image using BoundingBox coordinates
-/// Applies box thickness that is dynamically scaled by input image resolution
-fn draw_bboxes(mut img: DynamicImage, bboxes: &Vec<BoundingBox>) -> Result<DynamicImage, Error> {
-    let img_d = img.width().min(img.height()) as f32;
-    let thickness = SCALE_THICKNESS * img_d; // scale thickness by smaller image edge
-    let thickness = (thickness as u32).max(1);
+fn xywh_to_xyxy(x: &f32, y: &f32, w: &f32, h: &f32) -> (f32, f32, f32, f32) {
+    let x1 = x - w / 2.0;
+    let y1 = y - h / 2.0;
+    let x2 = x + w / 2.0;
+    let y2 = y + h / 2.0;
+    (x1, y1, x2, y2)
+}
 
-    let font_data = include_bytes!("../../assets/DejaVuSans.ttf");
-    let font = FontArc::try_from_slice(font_data as &[u8]).unwrap();
-    let font_scale = SCALE_FONT * img_d;
-    let font_offset = (font_scale * 1.1) as u32;
-
-    for bbox in bboxes.iter() {
-        let box_color = COLORS[(bbox.class_idx as usize) % COLORS.len()];
-        let (x1, y1, w, h) = bbox.x1y1wh();
-        for t in 0..thickness {
-            let x = x1 - t;
-            let y = y1 - t;
-            let w = w + 2 * t;
-            let h = h + 2 * t;
-            let rect = Rect::at(x as i32, y as i32).of_size(w, h);
-            draw_hollow_rect_mut(&mut img, rect, box_color);
-
-            let label = format!("class {} ({:.2})", bbox.class_idx, bbox.score);
-            draw_text_mut(
-                &mut img,
-                box_color,
-                x1 as i32,
-                (y1 - font_offset) as i32,
-                font_scale,
-                &font,
-                &label,
-            );
-        }
+/// Class-Sensitive Non Maxima Suppression for Overlapping Bounding Boxes
+/// Iteratively removes lower scoring bboxes which have an IoU above iou_thresold.
+/// Inspired by: https://pytorch.org/vision/master/_modules/torchvision/ops/boxes.html#nms
+pub fn nms(boxes: &[BoundingBox], iou_threshold: f32) -> Vec<BoundingBox> {
+    if boxes.is_empty() {
+        return Vec::new();
     }
-    Ok(img)
+
+    // Compute the maximum coordinate value among all boxes
+    let max_coordinate = boxes.iter().fold(0.0_f32, |max_coord, bbox| {
+        max_coord.max(bbox.x2).max(bbox.y2)
+    });
+    let offset = max_coordinate + 1.0;
+
+    // Create a vector of shifted boxes with their original indices
+    let mut boxes_shifted: Vec<(BoundingBox, usize)> = boxes
+        .iter()
+        .enumerate()
+        .map(|(i, bbox)| {
+            let class_offset = offset * bbox.class_idx as f32;
+            let shifted_bbox = BoundingBox {
+                x1: bbox.x1 + class_offset,
+                y1: bbox.y1 + class_offset,
+                x2: bbox.x2 + class_offset,
+                y2: bbox.y2 + class_offset,
+                score: bbox.score,
+                class_idx: bbox.class_idx, // Keep class_idx the same
+            };
+            (shifted_bbox, i) // Keep track of the original index
+        })
+        .collect();
+
+    // Sort boxes in decreasing order based on scores
+    boxes_shifted
+        .sort_unstable_by(|a, b| b.0.score.partial_cmp(&a.0.score).unwrap_or(Ordering::Equal));
+
+    let mut keep_indices = Vec::new();
+
+    while let Some((current_box, original_index)) = boxes_shifted.first().cloned() {
+        keep_indices.push(original_index);
+        boxes_shifted.remove(0);
+
+        // Retain boxes that have an IoU less than or equal to the threshold with the current box
+        boxes_shifted.retain(|(bbox, _)| current_box.iou(bbox) <= iou_threshold);
+    }
+
+    // Collect the kept boxes from the original input
+    let mut kept_boxes: Vec<BoundingBox> = keep_indices.into_iter().map(|idx| boxes[idx]).collect();
+
+    // Sort the kept boxes in decreasing order of their scores
+    kept_boxes.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+
+    kept_boxes
 }

@@ -1,0 +1,56 @@
+
+// manually determined scale factors to print annotations / draw boxes
+const SCALE_THICKNESS: f32 = 15. / 3726.;
+const SCALE_FONT: f32 = 100. / 3726.;
+
+pub const COLORS: [Rgba<u8>; 10] = [
+    Rgba([204, 102, 204, 255]), // Darker Magenta
+    Rgba([204, 102, 136, 255]), // Darker Pink
+    Rgba([204, 163, 102, 255]), // Darker Peach
+    Rgba([204, 204, 102, 255]), // Darker Yellow
+    Rgba([102, 204, 142, 255]), // Darker Mint Green
+    Rgba([102, 163, 204, 255]), // Darker Blue
+    Rgba([163, 102, 204, 255]), // Darker Lavender
+    Rgba([204, 102, 153, 255]), // Darker Rose
+    Rgba([163, 204, 102, 255]), // Darker Lime
+    Rgba([102, 204, 204, 255]), // Darker Cyan
+];
+
+/// # Draw Rectangles
+/// Draws hollow rectangles onto input image using BoundingBox coordinates
+/// Applies box thickness that is dynamically scaled by input image resolution
+fn draw_bboxes(mut img: DynamicImage, bboxes: &Vec<BoundingBox>) -> Result<DynamicImage, Error> {
+    let img_d = img.width().min(img.height()) as f32;
+    let thickness = SCALE_THICKNESS * img_d; // scale thickness by smaller image edge
+    let thickness = (thickness as u32).max(1);
+
+    let font_data = include_bytes!("../../assets/DejaVuSans.ttf");
+    let font = FontArc::try_from_slice(font_data as &[u8]).unwrap();
+    let font_scale = SCALE_FONT * img_d;
+    let font_offset = (font_scale * 1.1) as u32;
+
+    for bbox in bboxes.iter() {
+        let box_color = COLORS[(bbox.class_idx as usize) % COLORS.len()];
+        let (x1, y1, w, h) = bbox.x1y1wh();
+        for t in 0..thickness {
+            let x = x1 - t;
+            let y = y1 - t;
+            let w = w + 2 * t;
+            let h = h + 2 * t;
+            let rect = Rect::at(x as i32, y as i32).of_size(w, h);
+            draw_hollow_rect_mut(&mut img, rect, box_color);
+
+            let label = format!("class {} ({:.2})", bbox.class_idx, bbox.score);
+            draw_text_mut(
+                &mut img,
+                box_color,
+                x1 as i32,
+                (y1 - font_offset) as i32,
+                font_scale,
+                &font,
+                &label,
+            );
+        }
+    }
+    Ok(img)
+}

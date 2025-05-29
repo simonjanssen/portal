@@ -5,41 +5,20 @@ use ort::inputs;
 use ort::session::{SessionInputValue, SessionOutputs};
 use std::borrow::Cow;
 
-use super::commons::ExecutionLogic;
-use super::detection::BoundingBox;
+use super::detection::{BoundingBox, ObjectDetection};
 
-fn img_to_arr(img: &DynamicImage, width: u32, height: u32) -> Result<Array4<f32>, Error> {
-    let (img_width, img_height) = img.dimensions();
-
-    let buf_u8 = if (img_width == width) && (img_height == height) {
-        img.to_rgb8().into_raw()
-    } else {
-        img.resize_exact(width, height, FilterType::Triangle)
-            .into_rgb8()
-            .into_raw()
-    };
-
-    // to float tensor
-    let buf_f32: Vec<f32> = buf_u8.into_iter().map(|v| (v as f32) / 255.0).collect();
-
-    // expand into 4dim array
-    let arr4 = Array3::from_shape_vec((height as usize, width as usize, 3), buf_f32)?
-        .permuted_axes([2, 0, 1])
-        .insert_axis(Axis(0));
-    Ok(arr4)
+pub struct DfineLike {
+    pub input_width: u32,
+    pub input_height: u32,
 }
 
-pub struct DfineLike {}
-
-impl ExecutionLogic for DfineLike {
-    type Prediction = Vec<BoundingBox>;
-
+impl ObjectDetection for DfineLike {
     fn make_inputs(
         &self,
         img: &DynamicImage,
     ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error> {
         let (img_width, img_height) = (img.width() as i64, img.height() as i64);
-        let images = img_to_arr(img, 640, 640)?;
+        let images = img_to_arr(img, self.input_width, self.input_height)?;
         let orig_target_size = Array2::from_shape_vec((1, 2), vec![img_width, img_height])?;
         let session_inputs = inputs! {
             "images" => images.view(),
@@ -48,7 +27,13 @@ impl ExecutionLogic for DfineLike {
         Ok(session_inputs)
     }
 
-    fn make_results(&self, outputs: SessionOutputs<'_, '_>) -> Result<Self::Prediction, Error> {
+    fn make_results(
+        &self,
+        outputs: SessionOutputs<'_, '_>,
+        _conf_thres: f32,
+        _iou_thres: f32,
+        max_detect: u32,
+    ) -> Result<Vec<BoundingBox>, Error> {
         let labels = outputs["labels"].try_extract_tensor::<i64>()?;
         let boxes = outputs["boxes"].try_extract_tensor::<f32>()?;
         let scores = outputs["scores"].try_extract_tensor::<f32>()?;
@@ -72,4 +57,25 @@ impl ExecutionLogic for DfineLike {
             .collect();
         Ok(bboxes)
     }
+}
+
+fn img_to_arr(img: &DynamicImage, width: u32, height: u32) -> Result<Array4<f32>, Error> {
+    let (img_width, img_height) = img.dimensions();
+
+    let buf_u8 = if (img_width == width) && (img_height == height) {
+        img.to_rgb8().into_raw()
+    } else {
+        img.resize_exact(width, height, FilterType::Triangle)
+            .into_rgb8()
+            .into_raw()
+    };
+
+    // to float tensor
+    let buf_f32: Vec<f32> = buf_u8.into_iter().map(|v| (v as f32) / 255.0).collect();
+
+    // expand into 4dim array
+    let arr4 = Array3::from_shape_vec((height as usize, width as usize, 3), buf_f32)?
+        .permuted_axes([2, 0, 1])
+        .insert_axis(Axis(0));
+    Ok(arr4)
 }

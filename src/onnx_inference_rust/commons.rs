@@ -1,37 +1,47 @@
 use anyhow::{Error, Result, anyhow};
-use image::{DynamicImage, Rgba};
 use ort::session::Session;
-use ort::session::{SessionInputValue, SessionOutputs};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use std::borrow::Cow;
+use super::dfine::DfineLike;
+use super::timm::TimmLike;
+use super::yolo::YoloLike;
 
-pub const COLORS: [Rgba<u8>; 10] = [
-    Rgba([204, 102, 204, 255]), // Darker Magenta
-    Rgba([204, 102, 136, 255]), // Darker Pink
-    Rgba([204, 163, 102, 255]), // Darker Peach
-    Rgba([204, 204, 102, 255]), // Darker Yellow
-    Rgba([102, 204, 142, 255]), // Darker Mint Green
-    Rgba([102, 163, 204, 255]), // Darker Blue
-    Rgba([163, 102, 204, 255]), // Darker Lavender
-    Rgba([204, 102, 153, 255]), // Darker Rose
-    Rgba([163, 204, 102, 255]), // Darker Lime
-    Rgba([102, 204, 204, 255]), // Darker Cyan
-];
+static TIMM_INPUTS: [&str; 2] = ["images", "orig_target_sizes"];
+static TIMM_OUTPUTS: [&str; 3] = ["labels", "boxes", "scores"];
+static DFINE_INPUTS: [&str; 2] = ["images", "orig_target_sizes"];
+static DFINE_OUTPUTS: [&str; 3] = ["labels", "boxes", "scores"];
+static YOLO_INPUTS: [&str; 1] = ["images"];
+static YOLO_OUTPUTS: [&str; 1] = ["output0"];
 
-pub trait ExecutionLogic {
-    type Prediction;
-    fn make_inputs(
-        &self,
-        img: &DynamicImage,
-    ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error>;
-    fn make_results(&self, outputs: SessionOutputs<'_, '_>) -> Result<Self::Prediction, Error>;
-    fn run(&self, img: &DynamicImage, session: &Session) -> Result<Self::Prediction, Error> {
-        let session_inputs = self.make_inputs(img)?;
-        let session_outputs = session.run(session_inputs)?;
-        self.make_results(session_outputs)
+pub enum Provider {
+    DfineLike(DfineLike),
+    YoloLike(YoloLike),
+    TimmLike(TimmLike),
+}
+
+pub fn determine_provider(session: &Session) -> Option<Provider> {
+    let input_names: Vec<&str> = session.inputs.iter().map(|i| i.name.as_str()).collect();
+    let output_names: Vec<&str> = session.outputs.iter().map(|o| o.name.as_str()).collect();
+    println!("{:?} | {:?}", input_names, output_names);
+    if input_names == DFINE_INPUTS && output_names == DFINE_OUTPUTS {
+        Some(Provider::DfineLike(DfineLike {
+            input_width: 640,
+            input_height: 640,
+        }))
+    } else if input_names == YOLO_INPUTS && output_names == YOLO_OUTPUTS {
+        Some(Provider::YoloLike(YoloLike {
+            input_width: 640,
+            input_height: 640,
+        }))
+    } else if input_names == TIMM_INPUTS && output_names == TIMM_OUTPUTS {
+        Some(Provider::TimmLike(TimmLike {
+            input_width: 224,
+            input_height: 224,
+        }))
+    } else {
+        None
     }
 }
 

@@ -1,8 +1,9 @@
-use super::commons::ExecutionLogic;
-use crate::onnx_inference_rust::timm::TimmLike;
+use anyhow::{Error, Result};
+use image::DynamicImage;
+use ndarray::{Array1, ArrayView1};
 use ort::session::Session;
-
-pub type Classifier = dyn ExecutionLogic<Prediction = Vec<ClassPrediction>>;
+use ort::session::{SessionInputValue, SessionOutputs};
+use std::borrow::Cow;
 
 #[derive(Debug)]
 pub struct ClassPrediction {
@@ -10,20 +11,33 @@ pub struct ClassPrediction {
     pub score: f32,
 }
 
-static TIMM_INPUTS: [&str; 2] = ["images", "orig_target_sizes"];
-static TIMM_OUTPUTS: [&str; 3] = ["labels", "boxes", "scores"];
-
-pub enum Provider {
-    TimmLike,
+pub trait Classification {
+    fn make_inputs(
+        &self,
+        img: &DynamicImage,
+        crop_pct: f32,
+    ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error>;
+    fn make_results(
+        &self,
+        outputs: SessionOutputs<'_, '_>,
+        apply_softmax: bool,
+    ) -> Result<Vec<ClassPrediction>, Error>;
+    fn run(
+        &self,
+        session: &Session,
+        img: &DynamicImage,
+        crop_pct: f32,
+        apply_softmax: bool,
+    ) -> Result<Vec<ClassPrediction>, Error> {
+        let session_inputs = self.make_inputs(img, crop_pct)?;
+        let session_outputs = session.run(session_inputs)?;
+        self.make_results(session_outputs, apply_softmax)
+    }
 }
 
-pub fn determine_provider(session: &Session) -> Option<Provider> {
-    let input_names: Vec<&str> = session.inputs.iter().map(|i| i.name.as_str()).collect();
-    let output_names: Vec<&str> = session.outputs.iter().map(|o| o.name.as_str()).collect();
-    println!("{:?} | {:?}", input_names, output_names);
-    if input_names == TIMM_INPUTS && output_names == TIMM_OUTPUTS {
-        Some(Provider::TimmLike)
-    } else {
-        None
-    }
+pub fn softmax(input_array: ArrayView1<f32>) -> Result<Array1<f32>, Error> {
+    let max_value = input_array.fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+    let exp_shifted = input_array.mapv(|x| (x - max_value).exp());
+    let sum_exp = exp_shifted.sum();
+    Ok(exp_shifted / sum_exp)
 }

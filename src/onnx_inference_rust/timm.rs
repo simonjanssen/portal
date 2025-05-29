@@ -1,12 +1,68 @@
 use anyhow::{Error, Result};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
-use ndarray::{Array1, Array3, Array4, ArrayView1, Axis, s};
+use ndarray::{Array3, Array4, Axis, s};
 use ort::inputs;
 use ort::session::SessionOutputs;
 use std::time::Instant;
 
-use super::classification::ClassPrediction;
-use super::commons::ExecutionLogic;
+use super::classification::{ClassPrediction, Classification, softmax};
+
+pub struct TimmLike {
+    pub input_width: u32,
+    pub input_height: u32,
+}
+
+impl Classification for TimmLike {
+    fn make_inputs(
+        &self,
+        img: &DynamicImage,
+        crop_pct: f32,
+    ) -> Result<
+        Vec<(
+            std::borrow::Cow<'_, str>,
+            ort::session::SessionInputValue<'_>,
+        )>,
+        Error,
+    > {
+        let images = img_to_arr(img, self.input_width, self.input_height, crop_pct)?;
+        let session_inputs = inputs! {
+            "images" => images.view(),
+        }?;
+        Ok(session_inputs)
+    }
+
+    fn make_results(
+        &self,
+        outputs: SessionOutputs<'_, '_>,
+        apply_softmax: bool,
+    ) -> Result<Vec<ClassPrediction>, Error> {
+        let output = outputs["output"].try_extract_tensor::<f32>()?;
+        println!("{:?}", output.shape());
+        let output = output.reversed_axes();
+        println!("{:?}", output.shape());
+        let output = output.slice(s![.., 0]);
+        println!("{:?}", output.shape());
+        let output = if apply_softmax {
+            softmax(output)?
+        } else {
+            output.to_owned()
+        };
+        let mut predictions = Vec::with_capacity(output.len_of(Axis(0)));
+        for (class_idx, score) in output.axis_iter(Axis(0)).enumerate() {
+            let score = score.first().copied().unwrap_or(0.);
+            predictions.push(ClassPrediction {
+                class_idx: class_idx as u32,
+                score,
+            });
+        }
+        predictions.sort_unstable_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        Ok(predictions)
+    }
+}
 
 /// # DynamicImage to ONNX Input Tensor
 /// 1. Center-crop for ONNX model input size
@@ -71,21 +127,7 @@ fn img_to_arr(
 
     // normalize image
     let start = Instant::now();
-    let arr = if false {
-        println!("--- for ---");
-        let mut buf_f32 = Vec::with_capacity(buf_u8.len());
-
-        for (i, &v) in buf_u8.iter().enumerate() {
-            let channel = i % 3;
-            let norm_val = (((v as f32) / 255.0) - mean_rgb[channel]) / std_rgb[channel];
-            buf_f32.push(norm_val);
-        }
-
-        // reshape to 3d-array
-        Array3::from_shape_vec((arr_height as usize, arr_width as usize, 3), buf_f32)?
-            .permuted_axes([2, 0, 1])
-            .insert_axis(Axis(0))
-    } else {
+    let arr = {
         let buf_f32: Vec<f32> = buf_u8.iter().map(|&v| (v as f32) / 255.0).collect();
         let arr3 = Array3::from_shape_vec((arr_height as usize, arr_width as usize, 3), buf_f32)?;
 
@@ -96,70 +138,9 @@ fn img_to_arr(
                 *x = (*x - mean_rgb[c]) / std_rgb[c];
             });
         }
-
         arr3.permuted_axes([2, 0, 1]).insert_axis(Axis(0))
     };
     let dt = start.elapsed();
     println!("[normalize] {:?}", dt);
     Ok(arr)
-}
-
-pub fn softmax(input_array: ArrayView1<f32>) -> Result<Array1<f32>, Error> {
-    let max_value = input_array.fold(f32::NEG_INFINITY, |a, &b| a.max(b));
-    let exp_shifted = input_array.mapv(|x| (x - max_value).exp());
-    let sum_exp = exp_shifted.sum();
-    Ok(exp_shifted / sum_exp)
-}
-
-pub struct TimmLike {
-    crop_pct: f32,
-    apply_softmax: bool,
-}
-
-impl ExecutionLogic for TimmLike {
-    type Prediction = Vec<ClassPrediction>;
-    fn make_inputs(
-        &self,
-        img: &DynamicImage,
-    ) -> Result<
-        Vec<(
-            std::borrow::Cow<'_, str>,
-            ort::session::SessionInputValue<'_>,
-        )>,
-        Error,
-    > {
-        let images = img_to_arr(img, 224, 224, self.crop_pct)?;
-        let session_inputs = inputs! {
-            "images" => images.view(),
-        }?;
-        Ok(session_inputs)
-    }
-
-    fn make_results(&self, outputs: SessionOutputs<'_, '_>) -> Result<Self::Prediction, Error> {
-        let output = outputs["output"].try_extract_tensor::<f32>()?;
-        println!("{:?}", output.shape());
-        let output = output.reversed_axes();
-        println!("{:?}", output.shape());
-        let output = output.slice(s![.., 0]);
-        println!("{:?}", output.shape());
-        let output = if self.apply_softmax {
-            softmax(output)?
-        } else {
-            output.to_owned()
-        };
-        let mut predictions = Vec::with_capacity(output.len_of(Axis(0)));
-        for (class_idx, score) in output.axis_iter(Axis(0)).enumerate() {
-            let score = score.first().copied().unwrap_or(0.);
-            predictions.push(ClassPrediction {
-                class_idx: class_idx as u32,
-                score,
-            });
-        }
-        predictions.sort_unstable_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        Ok(predictions)
-    }
 }
