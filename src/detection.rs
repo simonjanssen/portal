@@ -1,7 +1,9 @@
+pub mod dfine;
+pub mod yolo;
+
 use anyhow::{Error, Result};
 use image::DynamicImage;
 use ndarray::{ArrayView1, s};
-use ort::session::Session;
 use ort::session::{SessionInputValue, SessionOutputs};
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -20,16 +22,11 @@ pub trait ObjectDetection {
     ) -> Result<Vec<BoundingBox>, Error>;
     fn run(
         &self,
-        session: &Session,
         img: &DynamicImage,
         conf_thres: f32,
         iou_thres: f32,
         max_detect: usize,
-    ) -> Result<Vec<BoundingBox>, Error> {
-        let session_inputs = self.make_inputs(img)?;
-        let session_outputs = session.run(session_inputs)?;
-        self.make_results(session_outputs, conf_thres, iou_thres, max_detect)
-    }
+    ) -> Result<Vec<BoundingBox>, Error>;
 }
 
 #[derive(Default, Clone, Debug, Copy)]

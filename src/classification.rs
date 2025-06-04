@@ -1,7 +1,8 @@
+pub mod timm;
+
 use anyhow::{Error, Result};
 use image::DynamicImage;
 use ndarray::{Array1, ArrayView1};
-use ort::session::Session;
 use ort::session::{SessionInputValue, SessionOutputs};
 use std::borrow::Cow;
 
@@ -24,15 +25,10 @@ pub trait Classification {
     ) -> Result<Vec<ClassPrediction>, Error>;
     fn run(
         &self,
-        session: &Session,
         img: &DynamicImage,
         crop_pct: f32,
         apply_softmax: bool,
-    ) -> Result<Vec<ClassPrediction>, Error> {
-        let session_inputs = self.make_inputs(img, crop_pct)?;
-        let session_outputs = session.run(session_inputs)?;
-        self.make_results(session_outputs, apply_softmax)
-    }
+    ) -> Result<Vec<ClassPrediction>, Error>;
 }
 
 pub fn softmax(input_array: ArrayView1<f32>) -> Result<Array1<f32>, Error> {

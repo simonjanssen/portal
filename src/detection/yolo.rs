@@ -1,11 +1,16 @@
 use anyhow::{Error, Result};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use ndarray::{Array3, Array4, Axis, s};
-use ort::{inputs, session::Session};
+use ort::{
+    inputs,
+    session::{Session, SessionInputValue, SessionOutputs},
+};
+use std::borrow::Cow;
 
-use super::detection::{BoundingBox, ObjectDetection, nms};
+use crate::detection::{BoundingBox, ObjectDetection, nms};
 
 pub struct YoloLike {
+    pub session: Session,
     pub input_width: u32,
     pub input_height: u32,
 }
@@ -14,13 +19,7 @@ impl ObjectDetection for YoloLike {
     fn make_inputs(
         &self,
         img: &image::DynamicImage,
-    ) -> Result<
-        Vec<(
-            std::borrow::Cow<'_, str>,
-            ort::session::SessionInputValue<'_>,
-        )>,
-        Error,
-    > {
+    ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error> {
         let images = img_to_arr(img, self.input_width, self.input_height)?;
         let session_inputs = inputs! {
             "images" => images.view(),
@@ -30,7 +29,7 @@ impl ObjectDetection for YoloLike {
 
     fn make_results(
         &self,
-        outputs: ort::session::SessionOutputs<'_, '_>,
+        outputs: SessionOutputs<'_, '_>,
         conf_thres: f32,
         iou_thres: f32,
         max_detect: usize,
@@ -61,14 +60,13 @@ impl ObjectDetection for YoloLike {
 
     fn run(
         &self,
-        session: &Session,
         img: &DynamicImage,
         conf_thres: f32,
         iou_thres: f32,
         max_detect: usize,
     ) -> Result<Vec<BoundingBox>, Error> {
         let session_inputs = self.make_inputs(img)?;
-        let session_outputs = session.run(session_inputs)?;
+        let session_outputs = self.session.run(session_inputs)?;
         let mut bboxes = self.make_results(session_outputs, conf_thres, iou_thres, max_detect)?;
         let (base_w, base_h) = (640., 640.);
         let (target_w, target_h) = (img.width() as f32, img.height() as f32);

@@ -1,9 +1,17 @@
+use crate::detection::BoundingBox;
+use ab_glyph::FontArc;
+use anyhow::{Error, Result};
+use image::{DynamicImage, Rgba};
+use imageproc::{
+    drawing::{draw_hollow_rect_mut, draw_text_mut},
+    rect::Rect,
+};
 
 // manually determined scale factors to print annotations / draw boxes
 const SCALE_THICKNESS: f32 = 15. / 3726.;
 const SCALE_FONT: f32 = 100. / 3726.;
 
-pub const COLORS: [Rgba<u8>; 10] = [
+const COLORS: [Rgba<u8>; 10] = [
     Rgba([204, 102, 204, 255]), // Darker Magenta
     Rgba([204, 102, 136, 255]), // Darker Pink
     Rgba([204, 163, 102, 255]), // Darker Peach
@@ -19,12 +27,14 @@ pub const COLORS: [Rgba<u8>; 10] = [
 /// # Draw Rectangles
 /// Draws hollow rectangles onto input image using BoundingBox coordinates
 /// Applies box thickness that is dynamically scaled by input image resolution
-fn draw_bboxes(mut img: DynamicImage, bboxes: &Vec<BoundingBox>) -> Result<DynamicImage, Error> {
+pub fn draw_bboxes(
+    mut img: DynamicImage,
+    bboxes: &Vec<BoundingBox>,
+) -> Result<DynamicImage, Error> {
     let img_d = img.width().min(img.height()) as f32;
     let thickness = SCALE_THICKNESS * img_d; // scale thickness by smaller image edge
     let thickness = (thickness as u32).max(1);
-
-    let font_data = include_bytes!("../../assets/DejaVuSans.ttf");
+    let font_data = include_bytes!("../assets/DejaVuSans.ttf");
     let font = FontArc::try_from_slice(font_data as &[u8]).unwrap();
     let font_scale = SCALE_FONT * img_d;
     let font_offset = (font_scale * 1.1) as u32;

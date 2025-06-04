@@ -4,9 +4,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use super::dfine::DfineLike;
-use super::timm::TimmLike;
-use super::yolo::YoloLike;
+use crate::classification::timm::TimmLike;
+use crate::detection::{dfine::DfineLike, yolo::YoloLike};
 
 static DFINE_INPUTS: [&str; 2] = ["images", "orig_target_sizes"];
 static DFINE_OUTPUTS: [&str; 3] = ["labels", "boxes", "scores"];
@@ -21,37 +20,40 @@ pub enum Provider {
     TimmLike(TimmLike),
 }
 
-pub fn determine_provider(session: &Session) -> Result<Provider, Error> {
+pub fn determine_provider(session: Session) -> Result<Provider, Error> {
     let input_names: Vec<&str> = session.inputs.iter().map(|i| i.name.as_str()).collect();
     let output_names: Vec<&str> = session.outputs.iter().map(|o| o.name.as_str()).collect();
     println!("{:?} | {:?}", input_names, output_names);
     if input_names == DFINE_INPUTS && output_names == DFINE_OUTPUTS {
-        let (input_width, input_height) = determine_input_shape(session, "images")?;
+        let (input_width, input_height) = determine_input_shape(&session, "images")?;
         println!(
             "Model is DfineLike with input shape ({},{})",
             input_width, input_height
         );
         Ok(Provider::DfineLike(DfineLike {
+            session,
             input_width,
             input_height,
         }))
     } else if input_names == YOLO_INPUTS && output_names == YOLO_OUTPUTS {
-        let (input_width, input_height) = determine_input_shape(session, "images")?;
+        let (input_width, input_height) = determine_input_shape(&session, "images")?;
         println!(
             "Model is YoloLike with input shape ({},{})",
             input_width, input_height
         );
         Ok(Provider::YoloLike(YoloLike {
+            session,
             input_width,
             input_height,
         }))
     } else if input_names == TIMM_INPUTS && output_names == TIMM_OUTPUTS {
-        let (input_width, input_height) = determine_input_shape(session, "input0")?;
+        let (input_width, input_height) = determine_input_shape(&session, "input0")?;
         println!(
             "Model is TimmLike with input shape ({},{})",
             input_width, input_height
         );
         Ok(Provider::TimmLike(TimmLike {
+            session,
             input_width,
             input_height,
         }))

@@ -1,15 +1,13 @@
 use anyhow::{Error, Result};
 use clap::Parser;
 use image::ImageReader;
-use onnx_inference_rust::onnx_inference_rust::commons::Provider;
-use onnx_inference_rust::onnx_inference_rust::detection::ObjectDetection;
+use portal::classification::Classification;
+use portal::commons::Provider;
 use std::path::Path;
 
-pub use onnx_inference_rust::onnx_inference_rust::classification::Classification;
-pub use onnx_inference_rust::onnx_inference_rust::commons::{determine_provider, get_onnx_session};
-pub use onnx_inference_rust::onnx_inference_rust::detection;
-pub use onnx_inference_rust::onnx_inference_rust::dfine::DfineLike;
-pub use onnx_inference_rust::onnx_inference_rust::yolo::YoloLike;
+use portal::commons::{determine_provider, get_onnx_session};
+use portal::detection::ObjectDetection;
+use portal::visualize::draw_bboxes;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -31,19 +29,23 @@ fn main() -> Result<(), Error> {
     let img = ImageReader::open(path_img)?.decode()?;
 
     let session = get_onnx_session(Path::new(&path_onnx))?;
-    let provider = determine_provider(&session)?;
+    let provider = determine_provider(session)?;
 
     match provider {
         Provider::DfineLike(model) => {
-            let prediction = model.run(&session, &img, 0.25, 0.7, 300)?;
-            println!("{:?}", prediction.len())
+            let prediction = model.run(&img, 0.25, 0.7, 300)?;
+            println!("{:?}", prediction.len());
+            let annotated = draw_bboxes(img, &prediction)?;
+            annotated.save("./result.jpg")?;
         }
         Provider::YoloLike(model) => {
-            let prediction = model.run(&session, &img, 0.25, 0.7, 300)?;
-            println!("{:?}", prediction.len())
+            let prediction = model.run(&img, 0.25, 0.7, 300)?;
+            println!("{:?}", prediction.len());
+            let annotated = draw_bboxes(img, &prediction)?;
+            annotated.save("./result.jpg")?;
         }
         Provider::TimmLike(model) => {
-            let prediction = model.run(&session, &img, 0.875, true)?;
+            let prediction = model.run(&img, 0.875, true)?;
             println!("{:?}", prediction.len())
         }
     }

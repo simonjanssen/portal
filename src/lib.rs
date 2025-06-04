@@ -1,1 +1,4 @@
-pub mod onnx_inference_rust;
+pub mod classification;
+pub mod commons;
+pub mod detection;
+pub mod visualize;

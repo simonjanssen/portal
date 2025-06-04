@@ -2,12 +2,14 @@ use anyhow::{Error, Result};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use ndarray::{Array3, Array4, Axis, s};
 use ort::inputs;
-use ort::session::SessionOutputs;
+use ort::session::{Session, SessionInputValue, SessionOutputs};
+use std::borrow::Cow;
 use std::time::Instant;
 
-use super::classification::{ClassPrediction, Classification, softmax};
+use crate::classification::{ClassPrediction, Classification, softmax};
 
 pub struct TimmLike {
+    pub session: Session,
     pub input_width: u32,
     pub input_height: u32,
 }
@@ -17,13 +19,7 @@ impl Classification for TimmLike {
         &self,
         img: &DynamicImage,
         crop_pct: f32,
-    ) -> Result<
-        Vec<(
-            std::borrow::Cow<'_, str>,
-            ort::session::SessionInputValue<'_>,
-        )>,
-        Error,
-    > {
+    ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error> {
         let images = img_to_arr(img, self.input_width, self.input_height, crop_pct)?;
         let session_inputs = inputs! {
             "input0" => images.view(),
@@ -59,6 +55,17 @@ impl Classification for TimmLike {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         Ok(predictions)
+    }
+
+    fn run(
+        &self,
+        img: &DynamicImage,
+        crop_pct: f32,
+        apply_softmax: bool,
+    ) -> Result<Vec<ClassPrediction>, Error> {
+        let session_inputs = self.make_inputs(img, crop_pct)?;
+        let session_outputs = self.session.run(session_inputs)?;
+        self.make_results(session_outputs, apply_softmax)
     }
 }
 

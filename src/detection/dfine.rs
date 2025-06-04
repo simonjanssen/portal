@@ -2,12 +2,13 @@ use anyhow::{Error, Result};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use ndarray::{Array2, Array3, Array4, Axis, s};
 use ort::inputs;
-use ort::session::{SessionInputValue, SessionOutputs};
+use ort::session::{Session, SessionInputValue, SessionOutputs};
 use std::borrow::Cow;
 
-use super::detection::{BoundingBox, ObjectDetection};
+use crate::detection::{BoundingBox, ObjectDetection};
 
 pub struct DfineLike {
+    pub session: Session,
     pub input_width: u32,
     pub input_height: u32,
 }
@@ -62,6 +63,19 @@ impl ObjectDetection for DfineLike {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         bboxes.truncate(max_detect);
+        Ok(bboxes)
+    }
+
+    fn run(
+        &self,
+        img: &DynamicImage,
+        conf_thres: f32,
+        iou_thres: f32,
+        max_detect: usize,
+    ) -> Result<Vec<BoundingBox>, Error> {
+        let session_inputs = self.make_inputs(img)?;
+        let session_outputs = self.session.run(session_inputs)?;
+        let bboxes = self.make_results(session_outputs, conf_thres, iou_thres, max_detect)?;
         Ok(bboxes)
     }
 }

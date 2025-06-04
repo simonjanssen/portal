@@ -1041,21 +1041,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
-name = "onnx-inference-rust"
-version = "0.1.0"
-dependencies = [
- "ab_glyph",
- "anyhow",
- "clap",
- "image",
- "imageproc",
- "ndarray",
- "ort",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "ort"
 version = "2.0.0-rc.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1139,6 +1124,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8a2f0d8d040d7848a709caf78912debcc3f33ee4b3cac47d73d1e1069e83507"
 dependencies = [
  "portable-atomic",
+]
+
+[[package]]
+name = "portal"
+version = "0.0.1"
+dependencies = [
+ "ab_glyph",
+ "anyhow",
+ "clap",
+ "image",
+ "imageproc",
+ "ndarray",
+ "ort",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
