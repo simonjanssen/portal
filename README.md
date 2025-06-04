@@ -8,6 +8,11 @@ End-to-end reproduction of neural network predictions in Rust using ONNX checkpo
 This is a hybrid repository containing python scripts to export trained models as ONNX-files, and to run predictions with these ONNX-models in Rust.
 
 ## Quickstart
+
+### Step 1: Create ONNX Export
+Choosing from one of the available providers, create an ONNX model file. Export scripts from the offiical repositories / docs are linked in the table below.
+
+### Step 2: Run Predictions in Rust
 ```bash
 cargo run --release -- --image images/bus.jpg --model checkpoints/model.onnx
 ```
