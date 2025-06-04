@@ -20,7 +20,7 @@ Prediction task and matching models are automatically infered from ONNX files (i
 
 ## Supported/Tested Models
 | Task | Model-Family | Python / ONNX Export Script |
-| --- | --- | --- | --- |
+| --- | --- | --- |
 | Object Detection | Peterande / D-FINE | [Link](https://github.com/Peterande/D-FINE/blob/master/tools/deployment/export_onnx.py) |
 | Object Detection | Ultralytics / YOLO | [Link](https://docs.ultralytics.com/integrations/onnx/) |
 | Classification | HuggingFace / Pytorch Image Models | [Link](https://github.com/huggingface/pytorch-image-models/blob/main/onnx_export.py) |
