@@ -77,7 +77,6 @@ pub fn get_classes(path_json: &Path) -> Result<HashMap<i32, String>, Error> {
     Ok(mapping)
 }
 
-/// Determine input-tensor shape to resize our images accordingly
 pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32, u32), Error> {
     println!("{:?}", &session.inputs);
     for input in &session.inputs {
@@ -94,8 +93,6 @@ pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32
     Err(anyhow!("Failed to determine input shape!"))
 }
 
-/// Determine output-tensor name to extract as array
-/// For simplicity, we are assuming that the first tensor is the prediction-related one.
 pub fn determine_onnx_output(session: &Session) -> Result<(String, u32, u32), Error> {
     println!("{:?}", &session.outputs);
     for output in &session.outputs {

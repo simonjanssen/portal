@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Setup python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+        cache: 'pip'
+    - name: Install dependencies (dev)
+      run: |
+        pip install --upgrade pip
+        pip install poetry
+        poetry install --with dev --no-root
+    - name: Run cargo build (debug)
+      run: cargo build
+    - name: Run cargo tests (debug)
+      run: cargo test
+    - name: Download test images
+      run: wget -O ./images/bus.jpg https://upload.wikimedia.org/wikipedia/commons/4/49/Graz_Linien_Wagen_114_beim_Murpark.jpg
