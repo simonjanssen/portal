@@ -43,8 +43,8 @@ pub fn draw_bboxes(
         let box_color = COLORS[(bbox.class_idx as usize) % COLORS.len()];
         let (x1, y1, w, h) = bbox.x1y1wh();
         for t in 0..thickness {
-            let x = x1 - t;
-            let y = y1 - t;
+            let x = if x1 > t { x1 - t } else { x1 };
+            let y = if y1 > t { y1 - t } else { y1 };
             let w = w + 2 * t;
             let h = h + 2 * t;
             let rect = Rect::at(x as i32, y as i32).of_size(w, h);
