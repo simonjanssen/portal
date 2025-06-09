@@ -5,7 +5,7 @@ description = "Python-Trained ONNX Models in Rust"
 authors = [
     {name = "Simon Janssen",email = "janssen.simon@posteo.de"}
 ]
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
