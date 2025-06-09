@@ -33,7 +33,7 @@ fn main() -> Result<(), Error> {
 
     match provider {
         Provider::DfineLike(model) => {
-            let prediction = model.run(&img, 0.25, 0.7, 300)?;
+            let prediction = model.run(&img, 0.40, 0.7, 300)?;
             println!("{:?}", prediction.len());
             let annotated = draw_bboxes(img, &prediction)?;
             annotated.save("./result.jpg")?;
