@@ -22,10 +22,9 @@ fn main() -> Result<(), Error> {
     let args = Args::parse();
 
     let path_onnx = args.model;
-    let path_img = args.image;
-    println!("model: {}, image: {}", path_onnx, path_img);
+    let path_img = Path::new(&args.image);
+    println!("model: {}, image: {:?}", path_onnx, path_img);
 
-    let path_img = Path::new("./images/bus.jpg");
     let img = ImageReader::open(path_img)?.decode()?;
 
     let session = get_onnx_session(Path::new(&path_onnx))?;
@@ -33,16 +32,16 @@ fn main() -> Result<(), Error> {
 
     match provider {
         Provider::DfineLike(model) => {
-            let prediction = model.run(&img, 0.25, 0.7, 300)?;
+            let prediction = model.run(&img, 0.40, 0.7, 300)?;
             println!("{:?}", prediction.len());
             let annotated = draw_bboxes(img, &prediction)?;
-            annotated.save("./result.jpg")?;
+            annotated.into_rgb8().save("./result.jpg")?;
         }
         Provider::YoloLike(model) => {
             let prediction = model.run(&img, 0.25, 0.7, 300)?;
             println!("{:?}", prediction.len());
             let annotated = draw_bboxes(img, &prediction)?;
-            annotated.save("./result.jpg")?;
+            annotated.into_rgb8().save("./result.jpg")?;
         }
         Provider::TimmLike(model) => {
             let prediction = model.run(&img, 0.875, true)?;

@@ -86,7 +86,7 @@ fn img_to_arr(img: &DynamicImage, width: u32, height: u32) -> Result<Array4<f32>
     let buf_u8 = if (img_width == width) && (img_height == height) {
         img.to_rgb8().into_raw()
     } else {
-        img.resize_exact(width, height, FilterType::Triangle)
+        img.resize_exact(width, height, FilterType::CatmullRom)
             .into_rgb8()
             .into_raw()
     };
