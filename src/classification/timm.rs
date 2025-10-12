@@ -2,8 +2,8 @@ use anyhow::{Error, Result};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use ndarray::{Array3, Array4, Axis, s};
 use ort::inputs;
-use ort::session::{Session, SessionInputValue, SessionOutputs};
-use std::borrow::Cow;
+use ort::session::Session;
+use ort::value::Tensor;
 use std::time::Instant;
 
 use crate::classification::{ClassPrediction, Classification, softmax};
@@ -15,24 +15,24 @@ pub struct TimmLike {
 }
 
 impl Classification for TimmLike {
-    fn make_inputs(
-        &self,
+    fn run(
+        &mut self,
         img: &DynamicImage,
         crop_pct: f32,
-    ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error> {
-        let images = img_to_arr(img, self.input_width, self.input_height, crop_pct)?;
-        let session_inputs = inputs! {
-            "input0" => images.view(),
-        }?;
-        Ok(session_inputs)
-    }
-
-    fn make_results(
-        &self,
-        outputs: SessionOutputs<'_, '_>,
         apply_softmax: bool,
     ) -> Result<Vec<ClassPrediction>, Error> {
-        let output = outputs["output0"].try_extract_tensor::<f32>()?;
+        // prepare inputs
+        let image_array = img_to_arr(img, self.input_width, self.input_height, crop_pct)?;
+        let image_tensor = Tensor::from_array(image_array)?;
+        let session_inputs = inputs! {
+            "input0" => image_tensor
+        };
+
+        // run inference
+        let session_outputs = self.session.run(session_inputs)?;
+
+        // postprocess results
+        let output = session_outputs["output0"].try_extract_array::<f32>()?;
         let output = output.reversed_axes();
         let output = output.slice(s![.., 0]);
         println!("{:?}", output.shape());
@@ -55,17 +55,6 @@ impl Classification for TimmLike {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         Ok(predictions)
-    }
-
-    fn run(
-        &self,
-        img: &DynamicImage,
-        crop_pct: f32,
-        apply_softmax: bool,
-    ) -> Result<Vec<ClassPrediction>, Error> {
-        let session_inputs = self.make_inputs(img, crop_pct)?;
-        let session_outputs = self.session.run(session_inputs)?;
-        self.make_results(session_outputs, apply_softmax)
     }
 }
 

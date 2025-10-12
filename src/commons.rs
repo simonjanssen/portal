@@ -80,15 +80,14 @@ pub fn get_classes(path_json: &Path) -> Result<HashMap<i32, String>, Error> {
 pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32, u32), Error> {
     println!("{:?}", &session.inputs);
     for input in &session.inputs {
-        if input.name == input_name {
-            if let Some(dims) = input.input_type.tensor_dimensions() {
+        if input.name == input_name
+            && let Some(dims) = input.input_type.tensor_shape() {
                 let d = dims.len();
                 if d > 1 {
                     let (w, h) = (dims[d - 2], dims[d - 1]);
                     return Ok((w as u32, h as u32));
                 }
             }
-        }
     }
     Err(anyhow!("Failed to determine input shape!"))
 }
@@ -96,7 +95,7 @@ pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32
 pub fn determine_onnx_output(session: &Session) -> Result<(String, u32, u32), Error> {
     println!("{:?}", &session.outputs);
     for output in &session.outputs {
-        if let Some(dims) = output.output_type.tensor_dimensions() {
+        if let Some(dims) = output.output_type.tensor_shape() {
             let d = dims.len();
             if d > 1 {
                 let (w, h) = (dims[d - 2], dims[d - 1]);

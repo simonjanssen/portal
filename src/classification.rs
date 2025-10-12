@@ -3,8 +3,6 @@ pub mod timm;
 use anyhow::{Error, Result};
 use image::DynamicImage;
 use ndarray::{Array1, ArrayView1};
-use ort::session::{SessionInputValue, SessionOutputs};
-use std::borrow::Cow;
 
 #[derive(Debug)]
 pub struct ClassPrediction {
@@ -13,18 +11,8 @@ pub struct ClassPrediction {
 }
 
 pub trait Classification {
-    fn make_inputs(
-        &self,
-        img: &DynamicImage,
-        crop_pct: f32,
-    ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error>;
-    fn make_results(
-        &self,
-        outputs: SessionOutputs<'_, '_>,
-        apply_softmax: bool,
-    ) -> Result<Vec<ClassPrediction>, Error>;
     fn run(
-        &self,
+        &mut self,
         img: &DynamicImage,
         crop_pct: f32,
         apply_softmax: bool,

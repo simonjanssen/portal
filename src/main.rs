@@ -31,19 +31,19 @@ fn main() -> Result<(), Error> {
     let provider = determine_provider(session)?;
 
     match provider {
-        Provider::DfineLike(model) => {
+        Provider::DfineLike(mut model) => {
             let prediction = model.run(&img, 0.40, 0.7, 300)?;
             println!("{:?}", prediction.len());
             let annotated = draw_bboxes(img, &prediction)?;
-            annotated.into_rgb8().save("./result.jpg")?;
+            annotated.into_rgb8().save("./result_dfine.jpg")?;
         }
-        Provider::YoloLike(model) => {
+        Provider::YoloLike(mut model) => {
             let prediction = model.run(&img, 0.25, 0.7, 300)?;
             println!("{:?}", prediction.len());
             let annotated = draw_bboxes(img, &prediction)?;
-            annotated.into_rgb8().save("./result.jpg")?;
+            annotated.into_rgb8().save("./result_yolo.jpg")?;
         }
-        Provider::TimmLike(model) => {
+        Provider::TimmLike(mut model) => {
             let prediction = model.run(&img, 0.875, true)?;
             println!("{:?}", prediction.len())
         }
