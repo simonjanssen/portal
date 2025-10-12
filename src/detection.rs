@@ -4,24 +4,11 @@ pub mod yolo;
 use anyhow::{Error, Result};
 use image::DynamicImage;
 use ndarray::{ArrayView1, s};
-use ort::session::{SessionInputValue, SessionOutputs};
-use std::borrow::Cow;
 use std::cmp::Ordering;
 
 pub trait ObjectDetection {
-    fn make_inputs(
-        &self,
-        img: &DynamicImage,
-    ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error>;
-    fn make_results(
-        &self,
-        outputs: SessionOutputs<'_, '_>,
-        conf_thres: f32,
-        iou_thres: f32,
-        max_detect: usize,
-    ) -> Result<Vec<BoundingBox>, Error>;
     fn run(
-        &self,
+        &mut self,
         img: &DynamicImage,
         conf_thres: f32,
         iou_thres: f32,

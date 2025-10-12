@@ -3,9 +3,9 @@ use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use ndarray::{Array3, Array4, Axis, s};
 use ort::{
     inputs,
-    session::{Session, SessionInputValue, SessionOutputs},
+    session::Session,
+    value::Tensor,
 };
-use std::borrow::Cow;
 
 use crate::detection::{BoundingBox, ObjectDetection, nms};
 
@@ -16,25 +16,25 @@ pub struct YoloLike {
 }
 
 impl ObjectDetection for YoloLike {
-    fn make_inputs(
-        &self,
-        img: &image::DynamicImage,
-    ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error> {
-        let images = img_to_arr(img, self.input_width, self.input_height)?;
-        let session_inputs = inputs! {
-            "images" => images.view(),
-        }?;
-        Ok(session_inputs)
-    }
-
-    fn make_results(
-        &self,
-        outputs: SessionOutputs<'_, '_>,
+    fn run(
+        &mut self,
+        img: &DynamicImage,
         conf_thres: f32,
         iou_thres: f32,
         max_detect: usize,
     ) -> Result<Vec<BoundingBox>, Error> {
-        let output = outputs["output0"].try_extract_tensor::<f32>()?;
+        // prepare inputs
+        let image_array = img_to_arr(img, self.input_width, self.input_height)?;
+        let image_tensor = Tensor::from_array(image_array)?;
+        let session_inputs = inputs! {
+            "images" => image_tensor
+        };
+
+        // run inference
+        let session_outputs = self.session.run(session_inputs)?;
+
+        // postprocess results
+        let output = session_outputs["output0"].try_extract_array::<f32>()?;
         let view_candidates = output.slice(s![0, 4.., ..]);
         let mask_candidates: Vec<bool> = view_candidates
             .axis_iter(Axis(1))
@@ -55,19 +55,7 @@ impl ObjectDetection for YoloLike {
         let mut bboxes = nms(&bboxes, iou_thres);
         bboxes.truncate(max_detect); // keep only max detections
         println!("len bboxes nms: {:?}", bboxes.len());
-        Ok(bboxes)
-    }
 
-    fn run(
-        &self,
-        img: &DynamicImage,
-        conf_thres: f32,
-        iou_thres: f32,
-        max_detect: usize,
-    ) -> Result<Vec<BoundingBox>, Error> {
-        let session_inputs = self.make_inputs(img)?;
-        let session_outputs = self.session.run(session_inputs)?;
-        let mut bboxes = self.make_results(session_outputs, conf_thres, iou_thres, max_detect)?;
         let (base_w, base_h) = (640., 640.);
         let (target_w, target_h) = (img.width() as f32, img.height() as f32);
         let scale_w = target_w / base_w;
@@ -75,6 +63,7 @@ impl ObjectDetection for YoloLike {
         for bbox in &mut bboxes {
             bbox.scale(scale_w, scale_h);
         }
+
         Ok(bboxes)
     }
 }

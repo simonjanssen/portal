@@ -2,8 +2,8 @@ use anyhow::{Error, Result};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use ndarray::{Array2, Array3, Array4, Axis, s};
 use ort::inputs;
-use ort::session::{Session, SessionInputValue, SessionOutputs};
-use std::borrow::Cow;
+use ort::session::Session;
+use ort::value::Tensor;
 
 use crate::detection::{BoundingBox, ObjectDetection};
 
@@ -14,30 +14,31 @@ pub struct DfineLike {
 }
 
 impl ObjectDetection for DfineLike {
-    fn make_inputs(
-        &self,
+    fn run(
+        &mut self,
         img: &DynamicImage,
-    ) -> Result<Vec<(Cow<'_, str>, SessionInputValue<'_>)>, Error> {
-        let (img_width, img_height) = (img.width() as i64, img.height() as i64);
-        let images = img_to_arr(img, self.input_width, self.input_height)?;
-        let orig_target_size = Array2::from_shape_vec((1, 2), vec![img_width, img_height])?;
-        let session_inputs = inputs! {
-            "images" => images.view(),
-            "orig_target_sizes" => orig_target_size.view()
-        }?;
-        Ok(session_inputs)
-    }
-
-    fn make_results(
-        &self,
-        outputs: SessionOutputs<'_, '_>,
         conf_thres: f32,
-        _iou_thres: f32,
+        iou_thres: f32,
         max_detect: usize,
     ) -> Result<Vec<BoundingBox>, Error> {
-        let labels = outputs["labels"].try_extract_tensor::<i64>()?;
-        let boxes = outputs["boxes"].try_extract_tensor::<f32>()?;
-        let scores = outputs["scores"].try_extract_tensor::<f32>()?;
+        // prepare inputs
+        let (img_width, img_height) = (img.width() as i64, img.height() as i64);
+        let image_array = img_to_arr(img, self.input_width, self.input_height)?;
+        let image_tensor = Tensor::from_array(image_array)?;
+        let orig_target_size_array = Array2::from_shape_vec((1, 2), vec![img_width, img_height])?;
+        let orig_target_size_tensor = Tensor::from_array(orig_target_size_array)?;
+        let session_inputs = inputs! {
+            "images" => image_tensor,
+            "orig_target_sizes" => orig_target_size_tensor
+        };
+
+        // run inference
+        let session_outputs = self.session.run(session_inputs)?;
+
+        // postprocess results
+        let labels = session_outputs["labels"].try_extract_array::<i64>()?;
+        let boxes = session_outputs["boxes"].try_extract_array::<f32>()?;
+        let scores = session_outputs["scores"].try_extract_array::<f32>()?;
         let mut bboxes: Vec<BoundingBox> = boxes
             .axis_iter(Axis(1))
             .enumerate()
@@ -63,19 +64,6 @@ impl ObjectDetection for DfineLike {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         bboxes.truncate(max_detect);
-        Ok(bboxes)
-    }
-
-    fn run(
-        &self,
-        img: &DynamicImage,
-        conf_thres: f32,
-        iou_thres: f32,
-        max_detect: usize,
-    ) -> Result<Vec<BoundingBox>, Error> {
-        let session_inputs = self.make_inputs(img)?;
-        let session_outputs = self.session.run(session_inputs)?;
-        let bboxes = self.make_results(session_outputs, conf_thres, iou_thres, max_detect)?;
         Ok(bboxes)
     }
 }
