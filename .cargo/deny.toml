@@ -1,0 +1,47 @@
+# Configuration for `cargo deny`. See https://embarkstudios.github.io/cargo-deny/
+#
+# This crate is published under MIT OR Apache-2.0, so we only allow permissive
+# licenses (or weak file-level copyleft like MPL-2.0) in our dependency tree.
+
+[licenses]
+# SPDX identifiers of licenses we accept in dependencies. We publish under
+# MIT OR Apache-2.0; every license below is an OSI-approved permissive license
+# that is compatible with redistribution in an MIT/Apache-2.0 project (they
+# only require preserving copyright/attribution notices).
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-2-Clause",       # av1-grain, rav1e, v_frame, zerocopy (via image/ort)
+    "BSD-3-Clause",       # avif-serialize, exr, lebe, moxcms, pxfm, ravif
+    "ISC",                # hmac-sha256 (ort-sys build dependency)
+    "Unicode-3.0",        # unicode-ident
+    "CDLA-Permissive-2.0", # webpki-root-certs (ureq, ort-sys build dependency)
+]
+# Per-crate license exceptions: grant additional licenses to specific crates
+# only. libfuzzer-sys is an optional fuzzing-only dependency (pulled in via
+# rav1e's fuzz feature) and is never part of the published artifact, so we
+# allow its NCSA component here rather than allowing NCSA globally.
+exceptions = [
+    { name = "libfuzzer-sys", allow = ["NCSA"] },
+]
+# Threshold (0.0 - 1.0) for accepting a license file as matching its claimed
+# SPDX expression. 0.8 is the default; bump if false positives appear.
+confidence-threshold = 0.8
+
+[bans]
+# Allow multiple versions of the same crate to coexist (common with
+# transitive deps); flip to "deny" if you want to enforce single versions.
+multiple-versions = "allow"
+wildcards = "deny"
+
+[advisories]
+# Vulnerability scanning is handled by `cargo audit` in CI (see
+# .cargo/audit.toml). This section is kept empty so `cargo deny check` is
+# self-contained and can also be run locally without surprises.
+ignore = []
+
+[sources]
+# Only allow crates from the official registry.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
