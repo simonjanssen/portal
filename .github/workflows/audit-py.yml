@@ -1,0 +1,53 @@
+name: Audit (Python)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/audit-py.yml'
+  workflow_dispatch:
+  schedule:
+    # Every Monday at 06:00 UTC
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  licenses:
+    name: Python License Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        # Includes the dev dependency-group (onnx, onnxruntime, onnxslim); there
+        # are currently no runtime dependencies.
+        run: uv sync --frozen
+
+      - name: Check dependency licenses
+        # License allowlist gate, analogous to `cargo deny check licenses` on the
+        # Rust side (.cargo/deny.toml). We publish under MIT OR Apache-2.0, so we
+        # only allow OSI-approved permissive licenses.
+        #
+        # `--partial-match` matches on license *tokens* (substrings) because pip
+        # package metadata reports licenses in inconsistent formats: SPDX ids,
+        # compound `AND`/`OR` expressions (e.g. numpy), and legacy Trove
+        # classifier strings ("BSD License", "Apache Software License"). A package
+        # passes if at least one allowed token appears in its license string.
+        #
+        # pip-licenses reads installed package metadata, so it must run inside the
+        # synced project environment via `uv run` (not `uvx`).
+        run: |
+          uv run --with pip-licenses pip-licenses \
+            --from=mixed \
+            --partial-match \
+            --allow-only="MIT;BSD;Apache;PSF;Python Software Foundation License;ISC;Zlib;0BSD;CC0-1.0"
