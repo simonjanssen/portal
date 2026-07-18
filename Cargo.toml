@@ -9,7 +9,7 @@ ab_glyph = "0.2.32"
 anyhow = "1.0.102"
 clap = { version = "4.6.0", features = ["derive"] }
 image = "0.25.10"
-imageproc = "0.26.1"
+imageproc = "0.27.0"
 ndarray = "0.17.2"
 ort = "2.0.0-rc.12"
 serde = "1.0.228"
