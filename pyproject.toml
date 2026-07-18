@@ -8,7 +8,7 @@ dependencies = [
     "onnxruntime>=1.24.4",
     "onnxslim>=0.1.90",
     "torch>=2.11.0",
-    "torchvision>=0.26.0",
+    "torchvision>=0.28.0",
 ]
 
 [dependency-groups]
