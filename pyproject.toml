@@ -14,5 +14,5 @@ dependencies = [
 [dependency-groups]
 dev = [
     "timm>=1.0.26",
-    "ultralytics>=8.4.33",
+    "ultralytics>=8.4.100",
 ]
