@@ -2,4 +2,10 @@
 # See https://docs.rs/cargo-audit/latest/cargo_audit/config/index.html
 
 [advisories]
-ignore = []
+# Unmaintained-crate warnings for transitive dependencies with no upgrade path
+# (both pulled in via `image` / `imageproc` / `ab_glyph`). These are not
+# vulnerabilities. Revisit when the upstream crates drop these dependencies.
+ignore = [
+    "RUSTSEC-2024-0436", # paste (unmaintained) via pulp/rav1e/simba
+    "RUSTSEC-2026-0192", # ttf-parser (unmaintained) via ab_glyph
+]
