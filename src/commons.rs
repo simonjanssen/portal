@@ -21,8 +21,8 @@ pub enum Provider {
 }
 
 pub fn determine_provider(session: Session) -> Result<Provider, Error> {
-    let input_names: Vec<&str> = session.inputs.iter().map(|i| i.name.as_str()).collect();
-    let output_names: Vec<&str> = session.outputs.iter().map(|o| o.name.as_str()).collect();
+    let input_names: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
+    let output_names: Vec<&str> = session.outputs().iter().map(|o| o.name()).collect();
     println!("{:?} | {:?}", input_names, output_names);
     if input_names == DFINE_INPUTS && output_names == DFINE_OUTPUTS {
         let (input_width, input_height) = determine_input_shape(&session, "images")?;
@@ -78,10 +78,11 @@ pub fn get_classes(path_json: &Path) -> Result<HashMap<i32, String>, Error> {
 }
 
 pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32, u32), Error> {
-    println!("{:?}", &session.inputs);
-    for input in &session.inputs {
-        if input.name == input_name
-            && let Some(dims) = input.input_type.tensor_shape() {
+    let inputs = session.inputs();
+    println!("{:?}", inputs);
+    for input in inputs {
+        if input.name() == input_name
+            && let Some(dims) = input.dtype().tensor_shape() {
                 let d = dims.len();
                 if d > 1 {
                     let (w, h) = (dims[d - 2], dims[d - 1]);
@@ -93,13 +94,14 @@ pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32
 }
 
 pub fn determine_onnx_output(session: &Session) -> Result<(String, u32, u32), Error> {
-    println!("{:?}", &session.outputs);
-    for output in &session.outputs {
-        if let Some(dims) = output.output_type.tensor_shape() {
+    let outputs = session.outputs();
+    println!("{:?}", outputs);
+    for output in outputs {
+        if let Some(dims) = output.dtype().tensor_shape() {
             let d = dims.len();
             if d > 1 {
                 let (w, h) = (dims[d - 2], dims[d - 1]);
-                return Ok((String::from(&output.name), w as u32, h as u32));
+                return Ok((String::from(output.name()), w as u32, h as u32));
             }
         }
     }
