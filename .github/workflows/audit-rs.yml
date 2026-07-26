@@ -3,11 +3,6 @@ name: Audit (Rust)
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.cargo/audit.toml'
-      - '.cargo/deny.toml'
   workflow_dispatch:
   schedule:
     # Every Monday at 06:00 UTC
