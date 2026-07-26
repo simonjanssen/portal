@@ -6,5 +6,6 @@ __pycache__
 *.pt
 *.jpg
 *.png
-*.json
 .DS_Store
+/scripts
+/checkpoints

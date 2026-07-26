@@ -18,7 +18,7 @@ impl ObjectDetection for DfineLike {
         &mut self,
         img: &DynamicImage,
         conf_thres: f32,
-        iou_thres: f32,
+        _iou_thres: f32,
         max_detect: usize,
     ) -> Result<Vec<BoundingBox>, Error> {
         // prepare inputs

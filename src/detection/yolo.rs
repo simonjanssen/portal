@@ -1,11 +1,7 @@
 use anyhow::{Error, Result};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use ndarray::{Array3, Array4, Axis, s};
-use ort::{
-    inputs,
-    session::Session,
-    value::Tensor,
-};
+use ort::{inputs, session::Session, value::Tensor};
 
 use crate::detection::{BoundingBox, ObjectDetection, nms};
 

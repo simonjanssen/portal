@@ -27,10 +27,7 @@ const COLORS: [Rgba<u8>; 10] = [
 /// # Draw Rectangles
 /// Draws hollow rectangles onto input image using BoundingBox coordinates
 /// Applies box thickness that is dynamically scaled by input image resolution
-pub fn draw_bboxes(
-    mut img: DynamicImage,
-    bboxes: &Vec<BoundingBox>,
-) -> Result<DynamicImage, Error> {
+pub fn draw_bboxes(mut img: DynamicImage, bboxes: &[BoundingBox]) -> Result<DynamicImage, Error> {
     let img_d = img.width().min(img.height()) as f32;
     let thickness = SCALE_THICKNESS * img_d; // scale thickness by smaller image edge
     let thickness = (thickness as u32).max(1);
@@ -43,7 +40,7 @@ pub fn draw_bboxes(
         let box_color = COLORS[(bbox.class_idx as usize) % COLORS.len()];
         let (x1, y1, w, h) = bbox.x1y1wh();
         let label = format!("class {} ({:.2})", bbox.class_idx, bbox.score);
-        println!("{}", &label);
+        println!("{}", label);
         draw_text_mut(
             &mut img,
             box_color,

@@ -3,10 +3,6 @@ name: Audit (Python)
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - '.github/workflows/audit-py.yml'
   workflow_dispatch:
   schedule:
     # Every Monday at 06:00 UTC
