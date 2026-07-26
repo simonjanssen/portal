@@ -82,13 +82,14 @@ pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32
     println!("{:?}", inputs);
     for input in inputs {
         if input.name() == input_name
-            && let Some(dims) = input.dtype().tensor_shape() {
-                let d = dims.len();
-                if d > 1 {
-                    let (w, h) = (dims[d - 2], dims[d - 1]);
-                    return Ok((w as u32, h as u32));
-                }
+            && let Some(dims) = input.dtype().tensor_shape()
+        {
+            let d = dims.len();
+            if d > 1 {
+                let (w, h) = (dims[d - 2], dims[d - 1]);
+                return Ok((w as u32, h as u32));
             }
+        }
     }
     Err(anyhow!("Failed to determine input shape!"))
 }
