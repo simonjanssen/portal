@@ -63,7 +63,8 @@ pub fn determine_provider(session: Session) -> Result<Provider, Error> {
 }
 
 pub fn get_onnx_session(path_onnx: &Path) -> Result<Session, Error> {
-    let session = Session::builder()?.commit_from_file(path_onnx)?;
+    let env = ort::init().build()?;
+    let session = Session::builder(&env)?.commit_from_file(path_onnx)?;
     Ok(session)
 }
 
