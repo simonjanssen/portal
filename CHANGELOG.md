@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/simonjanssen/portal/compare/portal-v0.1.1...portal-v0.1.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* address failing quality gates ([#58](https://github.com/simonjanssen/portal/issues/58)) ([b0794f8](https://github.com/simonjanssen/portal/commit/b0794f84da7e2b74533e74c76bffd4025342c12f))
+* vars not secrets ([#60](https://github.com/simonjanssen/portal/issues/60)) ([c58838b](https://github.com/simonjanssen/portal/commit/c58838b659b6b989c75b99cbe45d8ff59015ce17))
+
 ## [0.1.1](https://github.com/simonjanssen/portal/compare/portal-v0.1.0...portal-v0.1.1) (2026-07-26)
 
 
