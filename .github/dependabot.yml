@@ -5,16 +5,14 @@ updates:
     schedule:
       interval: "weekly"
     commit-message:
-      prefix: "chore"
-      include: "scope"
+      prefix: "chore(deps-rs)"
 
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
     commit-message:
-      prefix: "chore"
-      include: "scope"
+      prefix: "chore(deps-py)"
 
   - package-ecosystem: "github-actions"
     directory: "/"
